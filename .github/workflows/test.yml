@@ -1,0 +1,41 @@
+name: CI & Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-build:
+    name: Test & Build Extension on Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension bundles
+        run: npm run build
+
+      - name: Run automated tests (Vitest)
+        run: npm test
+
+      - name: Package extension artifact (ZIP)
+        run: npm run build:zip
+
+      - name: Upload Extension Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-gemini-tts-extension
+          path: dist/youtube-gemini-tts-*.zip
+          retention-days: 14

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Gemini Zusammenfassung & TTS – Einstellungen</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo-wrap">
+        <img src="../icons/icon48.png" alt="Logo" class="logo">
+        <div>
+          <h1>YouTube Gemini Zusammenfassung & TTS</h1>
+          <p class="subtitle">Konfiguriere Sprachausgabe, YouTube-Verhalten und VPN-Hinweise</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Section 1: Google TTS Voice & Audio Settings -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-icon">🔊</span>
+          <h2>Google Text-to-Speech Einstellungen</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="voice-select">Stimme auswählen:</label>
+            <div class="voice-row">
+              <select id="voice-select" class="form-control">
+                <option value="">(Automatisch – Beste Google-Stimme)</option>
+              </select>
+              <button id="btn-test-voice" type="button" class="btn btn-secondary">
+                🔊 Testen
+              </button>
+            </div>
+            <small class="hint">Google Chrome stellt auf Ubuntu/Linux integrierte Google-Stimmen („Google Deutsch“, „Google US English“ etc.) bereit.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="lang-select">Bevorzugte Sprache:</label>
+            <select id="lang-select" class="form-control">
+              <option value="auto">Automatische Erkennung (Empfohlen)</option>
+              <option value="de-DE">Deutsch (de-DE)</option>
+              <option value="en-US">Englisch (en-US)</option>
+              <option value="en-GB">Englisch UK (en-GB)</option>
+              <option value="fr-FR">Französisch (fr-FR)</option>
+              <option value="es-ES">Spanisch (es-ES)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="rate-slider">
+                Geschwindigkeit: <span id="rate-value" class="badge">1.0x</span>
+              </label>
+              <input type="range" id="rate-slider" min="0.5" max="2.0" step="0.1" value="1.0" class="slider">
+            </div>
+
+            <div class="form-group col">
+              <label for="pitch-slider">
+                Tonhöhe: <span id="pitch-value" class="badge">1.0</span>
+              </label>
+              <input type="range" id="pitch-slider" min="0.5" max="1.5" step="0.1" value="1.0" class="slider">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="volume-slider">
+              Lautstärke: <span id="volume-value" class="badge">100%</span>
+            </label>
+            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1.0" class="slider">
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Playback Behavior -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-icon">🎬</span>
+          <h2>YouTube & Wiedergabe-Verhalten</h2>
+        </div>
+        <div class="card-body">
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-pause-video" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="toggle-label">
+              <strong>YouTube-Video automatisch pausieren</strong>
+              <p class="hint">Pausiert das Video, während die KI-Zusammenfassung vorgelesen wird, um Tonüberlagerungen zu vermeiden.</p>
+            </div>
+          </div>
+
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="resume-video-after-tts">
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="toggle-label">
+              <strong>Video nach dem Vorlesen fortsetzen</strong>
+              <p class="hint">Setzt die Videowiedergabe automatisch fort, sobald die Zusammenfassung fertig vorgelesen wurde.</p>
+            </div>
+          </div>
+
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="show-in-page-btn" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="toggle-label">
+              <strong>Schnellstart-Button unter dem Video anzeigen</strong>
+              <p class="hint">Fügt einen „✨ Gemini Zusammenfassung“-Button direkt in die YouTube-Leiste neben Like/Share ein.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Geofencing & US-VPN Guide -->
+      <section class="card vpn-card">
+        <div class="card-header">
+          <span class="card-icon">🌍</span>
+          <h2>Geofencing & US-VPN Hinweis</h2>
+        </div>
+        <div class="card-body">
+          <p>
+            YouTube schaltet die integrierte <strong>Gemini („Ask / Fragen“) Funktion</strong> derzeit standardmäßig nur für Anfragen aus den <strong>USA</strong> frei.
+          </p>
+          <div class="vpn-steps">
+            <strong>Anleitung zur Freischaltung:</strong>
+            <ol>
+              <li>Aktiviere dein bevorzugtes VPN (z. B. auf Ubuntu über Wireguard, OpenVPN, Proton, NordVPN etc.).</li>
+              <li>Wähle einen Server-Standort in den <strong>USA</strong> (z. B. Chicago, New York, San Francisco).</li>
+              <li>Lade das YouTube-Video neu (<kbd>F5</kbd>). Der native Gemini-Button ist nun aktiv!</li>
+              <li>Ein Klick auf das Plugin reicht, um das Video zusammenzufassen und vorlesen zu lassen.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Advanced Optional Google Cloud TTS -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-icon">☁️</span>
+          <h2>Optional: Google Cloud Text-to-Speech API</h2>
+        </div>
+        <div class="card-body">
+          <p class="hint">
+            Standardmäßig verwendet das Plugin die in Chrome integrierten Google-Stimmen (kostenlos und ohne API-Key). Wenn du ultra-realistische Google Cloud Neural2/Journey Stimmen nutzen möchtest, kannst du hier deinen eigenen Cloud API-Key hinterlegen.
+          </p>
+
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="use-cloud-tts">
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="toggle-label">
+              <strong>Google Cloud TTS API verwenden</strong>
+            </div>
+          </div>
+
+          <div id="cloud-tts-fields" style="display: none; margin-top: 14px;">
+            <div class="form-group">
+              <label for="cloud-api-key">Google Cloud API-Schlüssel:</label>
+              <input type="password" id="cloud-api-key" class="form-control" placeholder="AIzaSy...">
+            </div>
+            <div class="form-group">
+              <label for="cloud-voice-name">Cloud Stimme:</label>
+              <select id="cloud-voice-name" class="form-control">
+                <option value="de-DE-Neural2-B">Deutsch – de-DE-Neural2-B (Männlich)</option>
+                <option value="de-DE-Neural2-F">Deutsch – de-DE-Neural2-F (Weiblich)</option>
+                <option value="en-US-Journey-F">Englisch – en-US-Journey-F (Weiblich)</option>
+                <option value="en-US-Journey-D">Englisch – en-US-Journey-D (Männlich)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Action buttons -->
+      <div class="footer-actions">
+        <button id="btn-reset" class="btn btn-secondary" type="button">Auf Standard zurücksetzen</button>
+        <button id="btn-save" class="btn btn-primary" type="button">💾 Einstellungen speichern</button>
+      </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Einstellungen gespeichert!</div>
+  </div>
+
+  <script src="options.bundle.js"></script>
+</body>
+</html>

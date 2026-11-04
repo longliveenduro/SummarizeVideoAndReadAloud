@@ -1,0 +1,27 @@
+{
+  "name": "youtube-gemini-summary-tts",
+  "version": "1.0.0",
+  "description": "Google Chrome Extension to summarize YouTube videos using YouTube's built-in Gemini feature and read the summary aloud using Google Text-to-Speech.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:zip": "npm run build && node scripts/package-extension.js"
+  },
+  "keywords": [
+    "chrome-extension",
+    "youtube",
+    "gemini",
+    "text-to-speech",
+    "tts",
+    "google-tts"
+  ],
+  "author": "Chris",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "vitest": "^2.1.8"
+  }
+}
