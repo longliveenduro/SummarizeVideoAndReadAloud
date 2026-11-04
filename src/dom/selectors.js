@@ -27,17 +27,25 @@ export const SELECTORS = {
     'ytd-engagement-panel-section-list-renderer[target-id*="ask"]',
     'ytd-engagement-panel-section-list-renderer[target-id*="search-summary"]',
     'ytd-engagement-panel-section-list-renderer[target-id*="summary"]',
-    'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]'
+    'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]',
+    'ytd-engagement-panel-section-list-renderer'
   ],
 
   // Response text container inside the panel
   responseContent: [
     'ytd-engagement-panel-section-list-renderer [slot="content"] yt-formatted-string',
-    '.clarity-summary-renderer',
     'ytd-conversational-message-renderer[is-response] #message',
     'ytd-conversational-message-renderer[is-response] yt-formatted-string',
+    'ytd-conversational-message-renderer[is-response]',
+    'yt-conversational-message-renderer',
+    'yt-conversational-response-view-model',
+    'ytd-conversational-response-view-model',
+    '.clarity-summary-renderer',
+    '.yt-clarity-summary-view-model',
     'ytd-ai-summary-renderer yt-formatted-string',
-    'ytd-engagement-panel-section-list-renderer #content yt-formatted-string'
+    'ytd-engagement-panel-section-list-renderer #content yt-formatted-string',
+    '[role="log"] yt-formatted-string',
+    '#chat-history yt-formatted-string'
   ],
 
   // Loading/Shimmer indicators when Gemini is thinking
@@ -46,7 +54,10 @@ export const SELECTORS = {
     'ytd-engagement-panel-section-list-renderer [slot="content"] .loading-shimmer',
     'ytd-engagement-panel-section-list-renderer [slot="content"] yt-activity-indicator',
     'ytd-engagement-panel-section-list-renderer [slot="content"] [aria-busy="true"]',
-    'ytd-engagement-panel-section-list-renderer .typing-indicator'
+    'ytd-engagement-panel-section-list-renderer .typing-indicator',
+    'tp-yt-paper-spinner',
+    '.typing-indicator',
+    '[aria-busy="true"]'
   ],
 
   // YouTube's main HTML5 video element
@@ -129,6 +140,38 @@ export function findAskButton(doc = document) {
 }
 
 /**
+ * Checks whether a given string corresponds to a summary chip label.
+ * Handles British English (Summarise), American English (Summarize), German (Zusammenfassen), and generic summary words.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isSummaryChipKeyword(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim().toLowerCase();
+
+  // Primary pattern matching both 'summarise' (UK) and 'summarize' (US) and 'summary'
+  if (clean.includes('summar') || clean.includes('zusammenfass')) {
+    return true;
+  }
+
+  // Secondary synonyms
+  const synonyms = [
+    'overview',
+    'tldr',
+    'tl;dr',
+    'key points',
+    'kernaussagen',
+    'überblick'
+  ];
+
+  for (const syn of synonyms) {
+    if (clean.includes(syn)) return true;
+  }
+
+  return false;
+}
+
+/**
  * Finds the "Summarize" chip or prompt button inside the Ask panel.
  * @param {Element} panelElement
  * @returns {HTMLElement | null}
@@ -136,27 +179,73 @@ export function findAskButton(doc = document) {
 export function findSummarizeChip(panelElement) {
   if (!panelElement) return null;
 
-  // Search chips and buttons inside the panel
-  const candidates = panelElement.querySelectorAll('yt-chip-cloud-chip-renderer, button, ytd-button-renderer, yt-button-view-model');
-  const chipKeywords = [
-    'summarize the video',
-    'summarize this video',
-    'summarize video',
-    'summarize',
-    'video zusammenfassen',
-    'dieses video zusammenfassen',
-    'zusammenfassen',
-    'summary'
+  // Search through all button and chip candidates in the panel
+  const candidateSelectors = [
+    'yt-suggestion-chip-view-model',
+    'yt-chip-cloud-chip-renderer',
+    'button',
+    '[role="button"]',
+    'yt-button-view-model',
+    'yt-button-shape',
+    '.yt-spec-button-shape-next',
+    'ytd-button-renderer',
+    'yt-formatted-string'
   ];
 
+  const candidates = panelElement.querySelectorAll(candidateSelectors.join(', '));
+
   for (const candidate of candidates) {
-    const text = (candidate.textContent || '').trim().toLowerCase();
-    for (const kw of chipKeywords) {
-      if (text.includes(kw)) {
-        return candidate.querySelector('button') || candidate;
+    const text = (candidate.textContent || '').trim();
+    if (isSummaryChipKeyword(text)) {
+      // Return clickable element (inner button, closest button or the element itself)
+      const clickable = candidate.querySelector('button, [role="button"]')
+        || candidate.closest('button, [role="button"], yt-suggestion-chip-view-model, yt-chip-cloud-chip-renderer, yt-button-view-model')
+        || candidate;
+      return clickable;
+    }
+  }
+
+  // Deep fallback: scan all leaf elements containing summary keywords
+  const allElements = panelElement.querySelectorAll('*');
+  for (const el of allElements) {
+    // Only check elements with direct text or few children
+    if (el.children.length <= 2) {
+      const text = (el.textContent || '').trim();
+      if (isSummaryChipKeyword(text)) {
+        return el.closest('button, [role="button"], yt-suggestion-chip-view-model, yt-chip-cloud-chip-renderer') || el;
       }
     }
   }
 
   return null;
+}
+
+/**
+ * Dispatches full user interaction event sequence to ensure Polymer/Lit components trigger.
+ * @param {HTMLElement} element
+ * @returns {boolean}
+ */
+export function simulateClick(element) {
+  if (!element) return false;
+
+  const target = element.querySelector('button, [role="button"]') || element;
+  const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+
+  for (const name of events) {
+    try {
+      const event = new MouseEvent(name, {
+        bubbles: true,
+        cancelable: true
+      });
+      target.dispatchEvent(event);
+    } catch {
+      // Ignore if event construction fails in mock environment
+    }
+  }
+
+  if (typeof target.click === 'function') {
+    target.click();
+  }
+
+  return true;
 }

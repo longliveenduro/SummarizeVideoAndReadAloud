@@ -52,3 +52,4 @@ describe('Storage Utility', () => {
     expect(settings).toEqual(DEFAULT_SETTINGS);
   });
 });
+

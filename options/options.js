@@ -211,3 +211,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 2800);
   }
 });
+

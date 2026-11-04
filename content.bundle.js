@@ -23,16 +23,24 @@
       'ytd-engagement-panel-section-list-renderer[target-id*="ask"]',
       'ytd-engagement-panel-section-list-renderer[target-id*="search-summary"]',
       'ytd-engagement-panel-section-list-renderer[target-id*="summary"]',
-      'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]'
+      'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]',
+      "ytd-engagement-panel-section-list-renderer"
     ],
     // Response text container inside the panel
     responseContent: [
       'ytd-engagement-panel-section-list-renderer [slot="content"] yt-formatted-string',
-      ".clarity-summary-renderer",
       "ytd-conversational-message-renderer[is-response] #message",
       "ytd-conversational-message-renderer[is-response] yt-formatted-string",
+      "ytd-conversational-message-renderer[is-response]",
+      "yt-conversational-message-renderer",
+      "yt-conversational-response-view-model",
+      "ytd-conversational-response-view-model",
+      ".clarity-summary-renderer",
+      ".yt-clarity-summary-view-model",
       "ytd-ai-summary-renderer yt-formatted-string",
-      "ytd-engagement-panel-section-list-renderer #content yt-formatted-string"
+      "ytd-engagement-panel-section-list-renderer #content yt-formatted-string",
+      '[role="log"] yt-formatted-string',
+      "#chat-history yt-formatted-string"
     ],
     // Loading/Shimmer indicators when Gemini is thinking
     loadingIndicator: [
@@ -40,7 +48,10 @@
       'ytd-engagement-panel-section-list-renderer [slot="content"] .loading-shimmer',
       'ytd-engagement-panel-section-list-renderer [slot="content"] yt-activity-indicator',
       'ytd-engagement-panel-section-list-renderer [slot="content"] [aria-busy="true"]',
-      "ytd-engagement-panel-section-list-renderer .typing-indicator"
+      "ytd-engagement-panel-section-list-renderer .typing-indicator",
+      "tp-yt-paper-spinner",
+      ".typing-indicator",
+      '[aria-busy="true"]'
     ],
     // YouTube's main HTML5 video element
     videoPlayer: "video.html5-main-video, .html5-video-player video"
@@ -91,28 +102,75 @@
     }
     return null;
   }
+  function isSummaryChipKeyword(text) {
+    if (!text || typeof text !== "string") return false;
+    const clean = text.trim().toLowerCase();
+    if (clean.includes("summar") || clean.includes("zusammenfass")) {
+      return true;
+    }
+    const synonyms = [
+      "overview",
+      "tldr",
+      "tl;dr",
+      "key points",
+      "kernaussagen",
+      "\xFCberblick"
+    ];
+    for (const syn of synonyms) {
+      if (clean.includes(syn)) return true;
+    }
+    return false;
+  }
   function findSummarizeChip(panelElement) {
     if (!panelElement) return null;
-    const candidates = panelElement.querySelectorAll("yt-chip-cloud-chip-renderer, button, ytd-button-renderer, yt-button-view-model");
-    const chipKeywords = [
-      "summarize the video",
-      "summarize this video",
-      "summarize video",
-      "summarize",
-      "video zusammenfassen",
-      "dieses video zusammenfassen",
-      "zusammenfassen",
-      "summary"
+    const candidateSelectors = [
+      "yt-suggestion-chip-view-model",
+      "yt-chip-cloud-chip-renderer",
+      "button",
+      '[role="button"]',
+      "yt-button-view-model",
+      "yt-button-shape",
+      ".yt-spec-button-shape-next",
+      "ytd-button-renderer",
+      "yt-formatted-string"
     ];
+    const candidates = panelElement.querySelectorAll(candidateSelectors.join(", "));
     for (const candidate of candidates) {
-      const text = (candidate.textContent || "").trim().toLowerCase();
-      for (const kw of chipKeywords) {
-        if (text.includes(kw)) {
-          return candidate.querySelector("button") || candidate;
+      const text = (candidate.textContent || "").trim();
+      if (isSummaryChipKeyword(text)) {
+        const clickable = candidate.querySelector('button, [role="button"]') || candidate.closest('button, [role="button"], yt-suggestion-chip-view-model, yt-chip-cloud-chip-renderer, yt-button-view-model') || candidate;
+        return clickable;
+      }
+    }
+    const allElements = panelElement.querySelectorAll("*");
+    for (const el of allElements) {
+      if (el.children.length <= 2) {
+        const text = (el.textContent || "").trim();
+        if (isSummaryChipKeyword(text)) {
+          return el.closest('button, [role="button"], yt-suggestion-chip-view-model, yt-chip-cloud-chip-renderer') || el;
         }
       }
     }
     return null;
+  }
+  function simulateClick(element) {
+    if (!element) return false;
+    const target = element.querySelector('button, [role="button"]') || element;
+    const events = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    for (const name of events) {
+      try {
+        const event = new MouseEvent(name, {
+          bubbles: true,
+          cancelable: true
+        });
+        target.dispatchEvent(event);
+      } catch {
+      }
+    }
+    if (typeof target.click === "function") {
+      target.click();
+    }
+    return true;
   }
 
   // src/dom/gemini-controller.js
@@ -223,7 +281,7 @@
       }
       const overflowBtn = this.doc.querySelector(SELECTORS.overflowButton.join(", "));
       if (overflowBtn) {
-        overflowBtn.click();
+        simulateClick(overflowBtn);
         await new Promise((r) => setTimeout(r, 300));
         const popupMenu = this.doc.querySelector("ytd-menu-popup-renderer, tp-yt-iron-dropdown");
         if (popupMenu) {
@@ -247,7 +305,7 @@
       if (!askButton) return null;
       let panel = this.getExpandedPanel();
       if (panel) return panel;
-      askButton.click();
+      simulateClick(askButton);
       panel = await this.waitFor(() => this.getExpandedPanel(), 6e3);
       return panel;
     }
@@ -258,11 +316,16 @@
     getExpandedPanel() {
       if (!this.doc) return null;
       for (const selector of SELECTORS.engagementPanel) {
-        const panel = this.doc.querySelector(selector);
-        if (panel) {
-          const style = this.win ? this.win.getComputedStyle(panel) : { display: "block" };
-          if (style.display !== "none" && panel.getAttribute("visibility") !== "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN") {
-            return panel;
+        const panels = this.doc.querySelectorAll(selector);
+        for (const panel of panels) {
+          const text = (panel.textContent || "").toLowerCase();
+          const targetId = (panel.getAttribute("target-id") || "").toLowerCase();
+          const isAskPanel = targetId.includes("ask") || targetId.includes("conversational") || targetId.includes("summary") || text.includes("ask about this video") || text.includes("curious about what you're watching");
+          if (isAskPanel) {
+            const style = this.win ? this.win.getComputedStyle(panel) : { display: "block" };
+            if (style.display !== "none" && panel.getAttribute("visibility") !== "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN") {
+              return panel;
+            }
           }
         }
       }
@@ -275,24 +338,59 @@
      */
     async triggerSummaryChip(panel) {
       if (!panel) return false;
-      const chip = await this.waitFor(() => findSummarizeChip(panel), 5e3);
+      const chipWaitTimeout = Math.min(this.timeout, 5e3);
+      const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
       if (chip) {
-        chip.click();
+        simulateClick(chip);
         return true;
       }
-      const inputField = panel.querySelector('textarea#input, div#input[contenteditable="true"], input[type="text"]');
-      const sendButton = panel.querySelector('#send-button button, button[aria-label*="Send"], yt-icon-button#send-button');
+      const inputSelectors = [
+        "textarea#input",
+        'div#input[contenteditable="true"]',
+        'div[role="textbox"]',
+        '[contenteditable="true"]',
+        "input#input",
+        'input[type="text"]',
+        "textarea"
+      ];
+      let inputField = null;
+      for (const sel of inputSelectors) {
+        inputField = panel.querySelector(sel);
+        if (inputField) break;
+      }
       if (inputField) {
-        if (inputField.tagName === "DIV") {
-          inputField.innerText = "Summarize this video";
+        const promptText = "Summarise the video";
+        if (inputField.isContentEditable || inputField.tagName === "DIV") {
+          inputField.focus();
+          inputField.textContent = promptText;
+          inputField.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, data: promptText }));
         } else {
-          inputField.value = "Summarize this video";
+          inputField.focus();
+          inputField.value = promptText;
+          inputField.dispatchEvent(new Event("input", { bubbles: true }));
+          inputField.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        inputField.dispatchEvent(new Event("input", { bubbles: true }));
-        if (sendButton) {
-          sendButton.click();
-          return true;
+        const enterOptions = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true };
+        inputField.dispatchEvent(new KeyboardEvent("keydown", enterOptions));
+        inputField.dispatchEvent(new KeyboardEvent("keypress", enterOptions));
+        inputField.dispatchEvent(new KeyboardEvent("keyup", enterOptions));
+        const sendButtonSelectors = [
+          "#send-button button",
+          'button[aria-label*="Send" i]',
+          'button[aria-label*="Senden" i]',
+          'button[aria-label*="Ask" i]',
+          "yt-icon-button#send-button",
+          "#send-button",
+          "button:has(svg)"
+        ];
+        for (const btnSel of sendButtonSelectors) {
+          const sendBtn = panel.querySelector(btnSel);
+          if (sendBtn) {
+            simulateClick(sendBtn);
+            break;
+          }
         }
+        return true;
       }
       return false;
     }
@@ -300,29 +398,67 @@
      * Waits for Gemini summary generation to finish and returns the extracted text.
      * @param {HTMLElement} panel
      * @param {(status: string) => void} [onProgress]
-     * @param {number} [timeoutMs=30000]
+     * @param {number} [timeoutMs=35000]
      * @returns {Promise<string>}
      */
     async extractSummaryText(panel, onProgress = () => {
-    }, timeoutMs = 3e4) {
+    }, timeoutMs = 35e3) {
       if (!panel) return "";
       const startTime = Date.now();
       let lastText = "";
       let stableCount = 0;
+      const ignoredPhrases = [
+        "ask about this video",
+        "curious about what you're watching",
+        "not sure what to ask? choose something",
+        "summarise the video",
+        "summarize the video",
+        "recommend related content",
+        "how should we control ai?",
+        "ask a question",
+        "ai can make mistakes"
+      ];
+      const cleanResponseText = (text) => {
+        let t = text.trim();
+        const lower = t.toLowerCase();
+        for (const phrase of ignoredPhrases) {
+          if (lower === phrase || lower.startsWith(phrase) && t.length < phrase.length + 15) {
+            return "";
+          }
+        }
+        return t;
+      };
       return new Promise((resolve, reject) => {
         const interval = setInterval(() => {
           const responseEls = panel.querySelectorAll(SELECTORS.responseContent.join(", "));
           let currentText = "";
           if (responseEls.length > 0) {
-            const latestEl = responseEls[responseEls.length - 1];
-            currentText = (latestEl.innerText || latestEl.textContent || "").trim();
+            for (let i = responseEls.length - 1; i >= 0; i--) {
+              const raw = (responseEls[i].innerText || responseEls[i].textContent || "").trim();
+              const cleaned = cleanResponseText(raw);
+              if (cleaned.length > 30) {
+                currentText = cleaned;
+                break;
+              }
+            }
+          }
+          if (!currentText) {
+            const allTextEls = panel.querySelectorAll('yt-formatted-string, p, [role="article"], .content');
+            for (let i = allTextEls.length - 1; i >= 0; i--) {
+              const raw = (allTextEls[i].innerText || allTextEls[i].textContent || "").trim();
+              const cleaned = cleanResponseText(raw);
+              if (cleaned.length > 50) {
+                currentText = cleaned;
+                break;
+              }
+            }
           }
           const hasLoadingIndicator = Boolean(panel.querySelector(SELECTORS.loadingIndicator.join(", ")));
           if (currentText.length > 0) {
             onProgress(`Generiere Zusammenfassung... (${currentText.length} Zeichen)`);
             if (currentText === lastText && !hasLoadingIndicator) {
               stableCount++;
-              if (stableCount >= 4 && currentText.length > 20) {
+              if (stableCount >= 4 && currentText.length > 25) {
                 clearInterval(interval);
                 return resolve(currentText);
               }
@@ -1097,7 +1233,7 @@
       btn.title = "Video mit Gemini zusammenfassen & per Google TTS vorlesen";
       btn.innerHTML = `
       <span class="sparkle">\u2728</span>
-      <span>Gemini Zusammenfassung</span>
+      <span class="yt-gemini-btn-text">Zusammenfassen</span>
     `;
       btn.addEventListener("click", (e) => {
         e.preventDefault();

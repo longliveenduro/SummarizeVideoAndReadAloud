@@ -46,3 +46,4 @@ describe('Geofencing Modal UI', () => {
     expect(modal.classList.contains('yt-gemini-fade-out')).toBe(true);
   });
 });
+

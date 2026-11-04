@@ -92,7 +92,7 @@ describe('GeminiController & DOM Automation', () => {
   });
 
   describe('findSummarizeChip & triggerSummaryChip', () => {
-    it('finds and clicks summarize chip inside conversational panel', async () => {
+    it('finds and clicks American English summarize chip inside conversational panel', async () => {
       const panel = document.createElement('div');
       panel.innerHTML = `
         <div class="chips-container">
@@ -110,6 +110,65 @@ describe('GeminiController & DOM Automation', () => {
       const triggered = await controller.triggerSummaryChip(panel);
       expect(triggered).toBe(true);
       expect(clickSpy).toHaveBeenCalled();
+    });
+
+    it('finds and clicks British English chip "Summarise the video" as shown on YouTube UK/International', async () => {
+      const panel = document.createElement('div');
+      panel.innerHTML = `
+        <div class="conversational-panel">
+          <yt-suggestion-chip-view-model>
+            <button class="yt-spec-button-shape-next" id="uk-chip">Summarise the video</button>
+          </yt-suggestion-chip-view-model>
+          <yt-suggestion-chip-view-model>
+            <button class="yt-spec-button-shape-next">Recommend related content</button>
+          </yt-suggestion-chip-view-model>
+        </div>
+      `;
+      document.body.appendChild(panel);
+
+      const chip = findSummarizeChip(panel);
+      expect(chip).toBeTruthy();
+      expect(chip.id).toBe('uk-chip');
+
+      const clickSpy = vi.spyOn(chip, 'click');
+      const triggered = await controller.triggerSummaryChip(panel);
+      expect(triggered).toBe(true);
+      expect(clickSpy).toHaveBeenCalled();
+    });
+
+    it('finds and clicks German chip "Video zusammenfassen"', async () => {
+      const panel = document.createElement('div');
+      panel.innerHTML = `
+        <div class="chips-container">
+          <button class="chip" id="de-chip">Video zusammenfassen</button>
+        </div>
+      `;
+      document.body.appendChild(panel);
+
+      const chip = findSummarizeChip(panel);
+      expect(chip).toBeTruthy();
+      expect(chip.id).toBe('de-chip');
+    });
+
+    it('falls back to input box when no chip is present', async () => {
+      const panel = document.createElement('div');
+      panel.innerHTML = `
+        <div class="chat-input-area">
+          <input type="text" id="input" />
+          <div id="send-button">
+            <button aria-label="Send">Send</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(panel);
+
+      const sendBtn = panel.querySelector('button');
+      const clickSpy = vi.spyOn(sendBtn, 'click');
+      const triggered = await controller.triggerSummaryChip(panel);
+
+      expect(triggered).toBe(true);
+      const inputEl = panel.querySelector('#input');
+      expect(inputEl.value).toBe('Summarise the video');
     });
   });
 

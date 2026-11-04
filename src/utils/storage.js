@@ -90,3 +90,4 @@ export async function saveSettings(newSettings, chromeInstance = (typeof chrome 
 export async function resetSettings(chromeInstance = (typeof chrome !== 'undefined' ? chrome : null)) {
   return saveSettings(DEFAULT_SETTINGS, chromeInstance);
 }
+

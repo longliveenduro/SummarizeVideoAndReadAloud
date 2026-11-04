@@ -6,37 +6,40 @@
    In-Page Button under YouTube Player (optional convenient button)
    -------------------------------------------------------------------------- */
 .yt-gemini-injected-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  font-family: "Roboto", "YouTube Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 36px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(135deg, rgba(255, 0, 51, 0.15), rgba(66, 133, 244, 0.15));
-  color: #0f0f0f;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  margin-left: 8px;
-  user-select: none;
-  vertical-align: middle;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  height: 36px !important;
+  padding: 0 16px !important;
+  margin-left: 8px !important;
+  border-radius: 18px !important;
+  font-family: "Roboto", "YouTube Sans", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  background: linear-gradient(135deg, rgba(255, 0, 51, 0.22), rgba(66, 133, 244, 0.22)) !important;
+  color: #f1f1f1 !important;
+  transition: all 0.2s ease-in-out !important;
+  vertical-align: middle !important;
 }
 
-html[dark] .yt-gemini-injected-btn,
-[dark] .yt-gemini-injected-btn {
-  color: #f1f1f1;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: linear-gradient(135deg, rgba(255, 0, 51, 0.25), rgba(66, 133, 244, 0.25));
+html:not([dark]) .yt-gemini-injected-btn {
+  color: #0f0f0f !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
 }
 
 .yt-gemini-injected-btn:hover {
-  background: linear-gradient(135deg, rgba(255, 0, 51, 0.35), rgba(66, 133, 244, 0.35));
+  background: linear-gradient(135deg, rgba(255, 0, 51, 0.35), rgba(66, 133, 244, 0.35)) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .yt-gemini-injected-btn:active {
@@ -44,7 +47,18 @@ html[dark] .yt-gemini-injected-btn,
 }
 
 .yt-gemini-injected-btn .sparkle {
-  font-size: 15px;
+  font-size: 14px !important;
+  margin-right: 6px !important;
+  line-height: 1 !important;
+  display: inline-block !important;
+}
+
+.yt-gemini-injected-btn .yt-gemini-btn-text {
+  white-space: nowrap !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  display: inline-block !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -426,3 +440,4 @@ html[dark] .yt-gemini-injected-btn,
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+

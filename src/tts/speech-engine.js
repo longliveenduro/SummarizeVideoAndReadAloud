@@ -259,3 +259,4 @@ export class SpeechEngine {
     this.onStateChange({ isPlaying: false, isPaused: false });
   }
 }
+

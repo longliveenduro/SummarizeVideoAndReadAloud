@@ -74,3 +74,4 @@ describe('SpeechEngine', () => {
     expect(stateChanges).toContainEqual({ isPlaying: false, isPaused: false });
   });
 });
+

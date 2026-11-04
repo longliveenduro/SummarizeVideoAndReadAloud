@@ -39,3 +39,4 @@ jobs:
           name: youtube-gemini-tts-extension
           path: dist/youtube-gemini-tts-*.zip
           retention-days: 14
+

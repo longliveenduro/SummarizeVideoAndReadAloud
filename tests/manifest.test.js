@@ -43,3 +43,4 @@ describe('Chrome Extension Manifest V3', () => {
     expect(manifest.content_scripts[0].css).toContain('content.css');
   });
 });
+

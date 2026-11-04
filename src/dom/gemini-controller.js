@@ -1,4 +1,4 @@
-import { SELECTORS, findAskButton, findSummarizeChip } from './selectors.js';
+import { SELECTORS, findAskButton, findSummarizeChip, simulateClick } from './selectors.js';
 
 export class GeminiController {
   constructor(options = {}) {
@@ -120,7 +120,7 @@ export class GeminiController {
     const overflowBtn = this.doc.querySelector(SELECTORS.overflowButton.join(', '));
     if (overflowBtn) {
       // Temporarily open overflow menu to inspect
-      overflowBtn.click();
+      simulateClick(overflowBtn);
       await new Promise(r => setTimeout(r, 300));
 
       const popupMenu = this.doc.querySelector('ytd-menu-popup-renderer, tp-yt-iron-dropdown');
@@ -153,8 +153,8 @@ export class GeminiController {
     let panel = this.getExpandedPanel();
     if (panel) return panel;
 
-    // Click the ask button
-    askButton.click();
+    // Click the ask button with full event sequence
+    simulateClick(askButton);
 
     // Wait for panel to appear and expand
     panel = await this.waitFor(() => this.getExpandedPanel(), 6000);
@@ -168,11 +168,19 @@ export class GeminiController {
   getExpandedPanel() {
     if (!this.doc) return null;
     for (const selector of SELECTORS.engagementPanel) {
-      const panel = this.doc.querySelector(selector);
-      if (panel) {
-        const style = this.win ? this.win.getComputedStyle(panel) : { display: 'block' };
-        if (style.display !== 'none' && panel.getAttribute('visibility') !== 'ENGAGEMENT_PANEL_VISIBILITY_HIDDEN') {
-          return panel;
+      const panels = this.doc.querySelectorAll(selector);
+      for (const panel of panels) {
+        const text = (panel.textContent || '').toLowerCase();
+        // Ensure this panel is the conversational AI panel (e.g. contains "ask about this video" or target-id has ask/conversational)
+        const targetId = (panel.getAttribute('target-id') || '').toLowerCase();
+        const isAskPanel = targetId.includes('ask') || targetId.includes('conversational') || targetId.includes('summary')
+          || text.includes('ask about this video') || text.includes('curious about what you\'re watching');
+
+        if (isAskPanel) {
+          const style = this.win ? this.win.getComputedStyle(panel) : { display: 'block' };
+          if (style.display !== 'none' && panel.getAttribute('visibility') !== 'ENGAGEMENT_PANEL_VISIBILITY_HIDDEN') {
+            return panel;
+          }
         }
       }
     }
@@ -187,29 +195,71 @@ export class GeminiController {
   async triggerSummaryChip(panel) {
     if (!panel) return false;
 
-    // Wait for chips to render
-    const chip = await this.waitFor(() => findSummarizeChip(panel), 5000);
+    // 1. Wait for and click the summary chip (supports British "Summarise", American "Summarize", German "Zusammenfassen")
+    const chipWaitTimeout = Math.min(this.timeout, 5000);
+    const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
     if (chip) {
-      chip.click();
+      simulateClick(chip);
       return true;
     }
 
-    // Fallback: If chip is not present, use the text input inside conversational panel
-    const inputField = panel.querySelector('textarea#input, div#input[contenteditable="true"], input[type="text"]');
-    const sendButton = panel.querySelector('#send-button button, button[aria-label*="Send"], yt-icon-button#send-button');
+    // 2. Fallback: If chip is not present or already clicked, use the text input at the bottom of the panel
+    const inputSelectors = [
+      'textarea#input',
+      'div#input[contenteditable="true"]',
+      'div[role="textbox"]',
+      '[contenteditable="true"]',
+      'input#input',
+      'input[type="text"]',
+      'textarea'
+    ];
+
+    let inputField = null;
+    for (const sel of inputSelectors) {
+      inputField = panel.querySelector(sel);
+      if (inputField) break;
+    }
 
     if (inputField) {
-      if (inputField.tagName === 'DIV') {
-        inputField.innerText = 'Summarize this video';
-      } else {
-        inputField.value = 'Summarize this video';
-      }
-      inputField.dispatchEvent(new Event('input', { bubbles: true }));
+      const promptText = 'Summarise the video';
 
-      if (sendButton) {
-        sendButton.click();
-        return true;
+      if (inputField.isContentEditable || inputField.tagName === 'DIV') {
+        inputField.focus();
+        inputField.textContent = promptText;
+        inputField.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: promptText }));
+      } else {
+        inputField.focus();
+        inputField.value = promptText;
+        inputField.dispatchEvent(new Event('input', { bubbles: true }));
+        inputField.dispatchEvent(new Event('change', { bubbles: true }));
       }
+
+      // Try hitting Enter key
+      const enterOptions = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true };
+      inputField.dispatchEvent(new KeyboardEvent('keydown', enterOptions));
+      inputField.dispatchEvent(new KeyboardEvent('keypress', enterOptions));
+      inputField.dispatchEvent(new KeyboardEvent('keyup', enterOptions));
+
+      // Also try clicking the submit/send button
+      const sendButtonSelectors = [
+        '#send-button button',
+        'button[aria-label*="Send" i]',
+        'button[aria-label*="Senden" i]',
+        'button[aria-label*="Ask" i]',
+        'yt-icon-button#send-button',
+        '#send-button',
+        'button:has(svg)'
+      ];
+
+      for (const btnSel of sendButtonSelectors) {
+        const sendBtn = panel.querySelector(btnSel);
+        if (sendBtn) {
+          simulateClick(sendBtn);
+          break;
+        }
+      }
+
+      return true;
     }
 
     return false;
@@ -219,15 +269,40 @@ export class GeminiController {
    * Waits for Gemini summary generation to finish and returns the extracted text.
    * @param {HTMLElement} panel
    * @param {(status: string) => void} [onProgress]
-   * @param {number} [timeoutMs=30000]
+   * @param {number} [timeoutMs=35000]
    * @returns {Promise<string>}
    */
-  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 30000) {
+  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 35000) {
     if (!panel) return '';
 
     const startTime = Date.now();
     let lastText = '';
     let stableCount = 0;
+
+    // Filter out common initial UI strings
+    const ignoredPhrases = [
+      'ask about this video',
+      'curious about what you\'re watching',
+      'not sure what to ask? choose something',
+      'summarise the video',
+      'summarize the video',
+      'recommend related content',
+      'how should we control ai?',
+      'ask a question',
+      'ai can make mistakes'
+    ];
+
+    const cleanResponseText = (text) => {
+      let t = text.trim();
+      const lower = t.toLowerCase();
+      // If the text is merely one of the greeting/chip prompts, ignore it
+      for (const phrase of ignoredPhrases) {
+        if (lower === phrase || lower.startsWith(phrase) && t.length < phrase.length + 15) {
+          return '';
+        }
+      }
+      return t;
+    };
 
     return new Promise((resolve, reject) => {
       const interval = setInterval(() => {
@@ -236,9 +311,28 @@ export class GeminiController {
         let currentText = '';
 
         if (responseEls.length > 0) {
-          // Take the latest response node
-          const latestEl = responseEls[responseEls.length - 1];
-          currentText = (latestEl.innerText || latestEl.textContent || '').trim();
+          // Take the latest response node that has actual summary text
+          for (let i = responseEls.length - 1; i >= 0; i--) {
+            const raw = (responseEls[i].innerText || responseEls[i].textContent || '').trim();
+            const cleaned = cleanResponseText(raw);
+            if (cleaned.length > 30) {
+              currentText = cleaned;
+              break;
+            }
+          }
+        }
+
+        // Deep fallback: If no response node matched specific selectors, check message bubbles
+        if (!currentText) {
+          const allTextEls = panel.querySelectorAll('yt-formatted-string, p, [role="article"], .content');
+          for (let i = allTextEls.length - 1; i >= 0; i--) {
+            const raw = (allTextEls[i].innerText || allTextEls[i].textContent || '').trim();
+            const cleaned = cleanResponseText(raw);
+            if (cleaned.length > 50) {
+              currentText = cleaned;
+              break;
+            }
+          }
         }
 
         // Check if loading indicators or shimmers are still active
@@ -249,8 +343,8 @@ export class GeminiController {
 
           if (currentText === lastText && !hasLoadingIndicator) {
             stableCount++;
-            // If text has remained stable for ~1 second and not loading, generation is complete
-            if (stableCount >= 4 && currentText.length > 20) {
+            // If text has remained stable for ~1.2 seconds and not loading, generation is complete
+            if (stableCount >= 4 && currentText.length > 25) {
               clearInterval(interval);
               return resolve(currentText);
             }

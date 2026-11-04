@@ -86,7 +86,7 @@ function injectInPageButton() {
     btn.title = 'Video mit Gemini zusammenfassen & per Google TTS vorlesen';
     btn.innerHTML = `
       <span class="sparkle">✨</span>
-      <span>Gemini Zusammenfassung</span>
+      <span class="yt-gemini-btn-text">Zusammenfassen</span>
     `;
 
     btn.addEventListener('click', (e) => {
@@ -214,3 +214,4 @@ if (typeof window !== 'undefined') {
     init();
   }
 }
+

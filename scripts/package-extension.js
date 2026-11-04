@@ -139,3 +139,4 @@ const zipBuffer = createZip(filesToZip);
 
 fs.writeFileSync(zipPath, zipBuffer);
 console.log(`Packaged ${filesToZip.length} files into ${zipPath} (${zipBuffer.length} bytes)`);
+

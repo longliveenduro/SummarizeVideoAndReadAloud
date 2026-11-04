@@ -130,3 +130,4 @@ function handleTtsSpeak(payload, sendResponse) {
     sendResponse({ error: err.message });
   }
 }
+
