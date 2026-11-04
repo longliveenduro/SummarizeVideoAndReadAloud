@@ -35,7 +35,89 @@ export function detectLanguage(text) {
 }
 
 /**
- * Normalizes timestamps like 01:23 or 1:04:20 into spoken text.
+ * Strips video timestamps (e.g. "(0:47-2:33)", "(3:14)", "02:15") from the text
+ * so that spoken audio flows smoothly without disruptive time codes.
+ * @param {string} text
+ * @returns {string}
+ */
+export function removeTimestamps(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  let cleaned = text;
+
+  // 1. Remove timestamps in parentheses or brackets: (0:47-2:33), (3:14), [01:23], etc.
+  cleaned = cleaned.replace(/\s*[\(\[]\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[\)\]]/g, '');
+
+  // 2. Remove standalone ranges: 0:47-2:33 or 0:47 - 2:33
+  cleaned = cleaned.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?\b/g, '');
+
+  // 3. Remove standalone single timestamps like 02:45
+  cleaned = cleaned.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, '');
+
+  // 4. Clean up orphaned punctuation caused by timestamp removal
+  cleaned = cleaned.replace(/\s+,/g, ',');
+  cleaned = cleaned.replace(/\s+\./g, '.');
+  cleaned = cleaned.replace(/\s+;/g, ';');
+  cleaned = cleaned.replace(/\s+:/g, ':');
+  cleaned = cleaned.replace(/,\s*,/g, ',');
+  cleaned = cleaned.replace(/,\s*\./g, '.');
+  cleaned = cleaned.replace(/\(\s*\)/g, '');
+  cleaned = cleaned.replace(/\[\s*\]/g, '');
+
+  return cleaned;
+}
+
+/**
+ * Optimizes pronunciation of technical acronyms and abbreviations for Text-to-Speech engines.
+ * Solves issues like German TTS reading "KI" as word "Ki" instead of letters "K-I" ("Ka-Ih").
+ * @param {string} text
+ * @param {'de' | 'en'} [lang='de']
+ * @returns {string}
+ */
+export function optimizePronunciation(text, lang = 'de') {
+  if (!text || typeof text !== 'string') return '';
+
+  let optimized = text;
+
+  if (lang === 'de') {
+    // Replace "KI" variations with hyphenated letters so TTS spells them: K-I -> "Ka-Ih"
+    optimized = optimized.replace(/\bKI-([a-zA-ZäöüÄÖÜß]+)/g, 'K-I-$1');
+    optimized = optimized.replace(/\bKIs\b/g, "K-Is");
+    optimized = optimized.replace(/\bKI\b/g, 'K-I');
+
+    // Common AI & Tech acronyms
+    optimized = optimized.replace(/\bAI-([a-zA-ZäöüÄÖÜß]+)/g, 'A-I-$1');
+    optimized = optimized.replace(/\bAI\b/g, 'A-I');
+    optimized = optimized.replace(/\bGPT-?(\d+)?\b/gi, (_m, ver) => ver ? `G-P-T-${ver}` : 'G-P-T');
+    optimized = optimized.replace(/\bLLMs?\b/g, 'L-L-M');
+    optimized = optimized.replace(/\bAPIs?\b/g, 'A-P-I');
+    optimized = optimized.replace(/\bURLs?\b/g, 'U-R-L');
+    optimized = optimized.replace(/\bTTS\b/g, 'T-T-S');
+
+    // Expand common German abbreviations into natural spoken words
+    optimized = optimized.replace(/\bbzw\.\b/gi, 'beziehungsweise');
+    optimized = optimized.replace(/\bz\.B\.\b/gi, 'zum Beispiel');
+    optimized = optimized.replace(/\bu\.a\.\b/gi, 'unter anderem');
+    optimized = optimized.replace(/\bd\.h\.\b/gi, 'das heißt');
+    optimized = optimized.replace(/\bca\.\b/gi, 'circa');
+    optimized = optimized.replace(/\betc\.\b/gi, 'et cetera');
+    optimized = optimized.replace(/\binkl\.\b/gi, 'inklusive');
+    optimized = optimized.replace(/\bvs\.\b/gi, 'versus');
+  } else {
+    // English pronunciation tuning
+    optimized = optimized.replace(/\bAI\b/g, 'A-I');
+    optimized = optimized.replace(/\bGPT-?(\d+)?\b/gi, (_m, ver) => ver ? `G-P-T ${ver}` : 'G-P-T');
+    optimized = optimized.replace(/\bLLMs?\b/g, 'L-L-M');
+    optimized = optimized.replace(/\be\.g\.\b/gi, 'for example');
+    optimized = optimized.replace(/\bi\.e\.\b/gi, 'that is');
+    optimized = optimized.replace(/\betc\.\b/gi, 'etcetera');
+  }
+
+  return optimized;
+}
+
+/**
+ * Normalizes timestamps like 01:23 or 1:04:20 into spoken text (alternative to removal).
  * @param {string} text
  * @param {'de' | 'en'} [lang='de']
  * @returns {string}
@@ -43,7 +125,6 @@ export function detectLanguage(text) {
 export function normalizeTimestamps(text, lang = 'de') {
   if (!text) return '';
 
-  // Match hh:mm:ss or mm:ss
   return text.replace(/\b(\d{1,2}):(\d{2}):(\d{2})\b/g, (_match, h, m, s) => {
     const hours = parseInt(h, 10);
     const minutes = parseInt(m, 10);
@@ -63,51 +144,59 @@ export function normalizeTimestamps(text, lang = 'de') {
 }
 
 /**
- * Cleans markdown, formatting artifacts, emojis, and raw links.
+ * Cleans markdown, formatting artifacts, emojis, raw links, and optimizes pronunciation.
  * @param {string} text
  * @param {'de' | 'en'} [lang='de']
+ * @param {{ stripTimestamps?: boolean }} [options={ stripTimestamps: true }]
  * @returns {string}
  */
-export function sanitizeForSpeech(text, lang = 'de') {
+export function sanitizeForSpeech(text, lang = 'de', options = { stripTimestamps: true }) {
   if (!text || typeof text !== 'string') return '';
 
   let cleaned = text;
 
-  // Replace URLs with spoken indicator or remove
+  // 1. Strip timestamps by default (or normalize if configured false)
+  if (options.stripTimestamps !== false) {
+    cleaned = removeTimestamps(cleaned);
+  } else {
+    cleaned = normalizeTimestamps(cleaned, lang);
+  }
+
+  // 2. Acronym & pronunciation tuning (e.g. KI -> K-I, GPT -> G-P-T)
+  cleaned = optimizePronunciation(cleaned, lang);
+
+  // 3. Replace URLs with spoken indicator
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, lang === 'de' ? 'Weblink' : 'link');
 
-  // Normalize timestamps before removing other symbols
-  cleaned = normalizeTimestamps(cleaned, lang);
-
-  // Markdown headers (# Header -> Header.)
+  // 4. Markdown headers (# Header -> Header.)
   cleaned = cleaned.replace(/^#{1,6}\s*(.+)$/gm, '$1.');
 
-  // Markdown bold & italics (**text**, *text*, __text__, _text_)
+  // 5. Markdown bold & italics (**text**, *text*, __text__, _text_)
   cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
   cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
   cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
   cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
 
-  // Markdown blockquotes
+  // 6. Markdown blockquotes
   cleaned = cleaned.replace(/^\s*>\s*/gm, '');
 
-  // Markdown lists / bullet points: convert into smooth paused lines
+  // 7. Markdown lists / bullet points: convert into smooth paused lines
   cleaned = cleaned.replace(/^\s*[-*•]\s+/gm, ' ');
   cleaned = cleaned.replace(/^\s*(\d+)\.\s+/gm, '$1. ');
 
-  // Code blocks and inline code (`code`)
+  // 8. Code blocks and inline code (`code`)
   cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
 
-  // Remove common visual emojis that sound weird in TTS (e.g. ✨, 🤖, 📌, 👉, 💡)
+  // 9. Remove common visual emojis that sound weird in TTS (e.g. ✨, 🤖, 📌, 👉, 💡)
   cleaned = cleaned.replace(/[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '');
 
-  // Replace repeated punctuation and weird brackets
+  // 10. Replace brackets and normalize repeated punctuation
   cleaned = cleaned.replace(/[\[\]{}()]/g, ' ');
   cleaned = cleaned.replace(/\.{2,}/g, '.');
   cleaned = cleaned.replace(/!{2,}/g, '!');
   cleaned = cleaned.replace(/\?{2,}/g, '?');
 
-  // Normalize whitespace
+  // 11. Normalize whitespace
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   return cleaned;
@@ -202,4 +291,3 @@ export function chunkTextForTTS(text, maxChunkLength = 180) {
 
   return chunks;
 }
-

@@ -194,6 +194,54 @@
     if (enScore > deScore) return "en";
     return "auto";
   }
+  function removeTimestamps(text) {
+    if (!text || typeof text !== "string") return "";
+    let cleaned = text;
+    cleaned = cleaned.replace(/\s*[\(\[]\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[\)\]]/g, "");
+    cleaned = cleaned.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?\b/g, "");
+    cleaned = cleaned.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "");
+    cleaned = cleaned.replace(/\s+,/g, ",");
+    cleaned = cleaned.replace(/\s+\./g, ".");
+    cleaned = cleaned.replace(/\s+;/g, ";");
+    cleaned = cleaned.replace(/\s+:/g, ":");
+    cleaned = cleaned.replace(/,\s*,/g, ",");
+    cleaned = cleaned.replace(/,\s*\./g, ".");
+    cleaned = cleaned.replace(/\(\s*\)/g, "");
+    cleaned = cleaned.replace(/\[\s*\]/g, "");
+    return cleaned;
+  }
+  function optimizePronunciation(text, lang = "de") {
+    if (!text || typeof text !== "string") return "";
+    let optimized = text;
+    if (lang === "de") {
+      optimized = optimized.replace(/\bKI-([a-zA-ZäöüÄÖÜß]+)/g, "K-I-$1");
+      optimized = optimized.replace(/\bKIs\b/g, "K-Is");
+      optimized = optimized.replace(/\bKI\b/g, "K-I");
+      optimized = optimized.replace(/\bAI-([a-zA-ZäöüÄÖÜß]+)/g, "A-I-$1");
+      optimized = optimized.replace(/\bAI\b/g, "A-I");
+      optimized = optimized.replace(/\bGPT-?(\d+)?\b/gi, (_m, ver) => ver ? `G-P-T-${ver}` : "G-P-T");
+      optimized = optimized.replace(/\bLLMs?\b/g, "L-L-M");
+      optimized = optimized.replace(/\bAPIs?\b/g, "A-P-I");
+      optimized = optimized.replace(/\bURLs?\b/g, "U-R-L");
+      optimized = optimized.replace(/\bTTS\b/g, "T-T-S");
+      optimized = optimized.replace(/\bbzw\.\b/gi, "beziehungsweise");
+      optimized = optimized.replace(/\bz\.B\.\b/gi, "zum Beispiel");
+      optimized = optimized.replace(/\bu\.a\.\b/gi, "unter anderem");
+      optimized = optimized.replace(/\bd\.h\.\b/gi, "das hei\xDFt");
+      optimized = optimized.replace(/\bca\.\b/gi, "circa");
+      optimized = optimized.replace(/\betc\.\b/gi, "et cetera");
+      optimized = optimized.replace(/\binkl\.\b/gi, "inklusive");
+      optimized = optimized.replace(/\bvs\.\b/gi, "versus");
+    } else {
+      optimized = optimized.replace(/\bAI\b/g, "A-I");
+      optimized = optimized.replace(/\bGPT-?(\d+)?\b/gi, (_m, ver) => ver ? `G-P-T ${ver}` : "G-P-T");
+      optimized = optimized.replace(/\bLLMs?\b/g, "L-L-M");
+      optimized = optimized.replace(/\be\.g\.\b/gi, "for example");
+      optimized = optimized.replace(/\bi\.e\.\b/gi, "that is");
+      optimized = optimized.replace(/\betc\.\b/gi, "etcetera");
+    }
+    return optimized;
+  }
   function normalizeTimestamps(text, lang = "de") {
     if (!text) return "";
     return text.replace(/\b(\d{1,2}):(\d{2}):(\d{2})\b/g, (_match, h, m, s) => {
@@ -213,11 +261,16 @@
       return `${minutes} minutes and ${seconds} seconds`;
     });
   }
-  function sanitizeForSpeech(text, lang = "de") {
+  function sanitizeForSpeech(text, lang = "de", options = { stripTimestamps: true }) {
     if (!text || typeof text !== "string") return "";
     let cleaned = text;
+    if (options.stripTimestamps !== false) {
+      cleaned = removeTimestamps(cleaned);
+    } else {
+      cleaned = normalizeTimestamps(cleaned, lang);
+    }
+    cleaned = optimizePronunciation(cleaned, lang);
     cleaned = cleaned.replace(/https?:\/\/\S+/gi, lang === "de" ? "Weblink" : "link");
-    cleaned = normalizeTimestamps(cleaned, lang);
     cleaned = cleaned.replace(/^#{1,6}\s*(.+)$/gm, "$1.");
     cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1");
     cleaned = cleaned.replace(/\*([^*]+)\*/g, "$1");
@@ -550,16 +603,17 @@
       return this.submitPrompt(panel, promptText);
     }
     /**
-     * Waits for Gemini summary generation to finish and returns the extracted text.
-     * If German summary was requested, but Gemini answered in English, automatically translates it into German.
+     * Waits for Gemini summary generation to finish and returns the full extracted text.
+     * Ensures the entire response (including all paragraphs, headlines, and bullet lists)
+     * is captured and generation has fully completed before returning.
      * @param {HTMLElement} panel
      * @param {(status: string) => void} [onProgress]
-     * @param {number} [timeoutMs=35000]
+     * @param {number} [timeoutMs=40000]
      * @param {'de' | 'en' | 'auto'} [summaryLang='de']
      * @returns {Promise<string>}
      */
     async extractSummaryText(panel, onProgress = () => {
-    }, timeoutMs = 35e3, summaryLang = "de") {
+    }, timeoutMs = 4e4, summaryLang = "de") {
       if (!panel) return "";
       const startTime = Date.now();
       let lastText = "";
@@ -576,47 +630,72 @@
         "ask a question",
         "ai can make mistakes"
       ];
-      const cleanResponseText = (text) => {
-        let t = text.trim();
-        const lower = t.toLowerCase();
+      const isIgnoredUI = (t) => {
+        const lower = t.trim().toLowerCase();
         for (const phrase of ignoredPhrases) {
-          if (lower === phrase || lower.startsWith(phrase) && t.length < phrase.length + 15) {
-            return "";
+          if (lower === phrase || lower.startsWith(phrase) && lower.length < phrase.length + 15) {
+            return true;
           }
         }
-        return t;
+        return false;
+      };
+      const cleanResponseText = (text) => {
+        if (!text) return "";
+        let t = text.trim();
+        return isIgnoredUI(t) ? "" : t;
+      };
+      const getFullResponseText = () => {
+        const assistantContainers = panel.querySelectorAll(
+          "ytd-conversational-message-renderer[is-response], ytd-conversational-message-renderer:not([is-user]), yt-conversational-response-view-model, ytd-conversational-response-view-model, .clarity-summary-renderer, ytd-ai-summary-renderer"
+        );
+        if (assistantContainers.length > 0) {
+          const latest = assistantContainers[assistantContainers.length - 1];
+          const text = (latest.innerText || latest.textContent || "").trim();
+          const cleaned = cleanResponseText(text);
+          if (cleaned.length > 30) {
+            return cleaned;
+          }
+        }
+        const slot = panel.querySelector('[slot="content"], #content, #chat-history');
+        if (slot) {
+          const blocks = Array.from(slot.querySelectorAll('yt-formatted-string, p, li, [role="article"]')).map((el) => (el.innerText || el.textContent || "").trim()).filter((t) => t.length > 0 && !isIgnoredUI(t));
+          if (blocks.length > 1) {
+            const uniqueBlocks = blocks.filter((b, idx) => {
+              return !blocks.some((other, oIdx) => oIdx !== idx && other.includes(b) && other.length > b.length);
+            });
+            const combined = uniqueBlocks.join("\n\n").trim();
+            if (combined.length > 30) {
+              return combined;
+            }
+          } else if (blocks.length === 1 && blocks[0].length > 30) {
+            return blocks[0];
+          }
+          const raw = (slot.innerText || slot.textContent || "").trim();
+          const cleaned = cleanResponseText(raw);
+          if (cleaned.length > 30) {
+            return cleaned;
+          }
+        }
+        return "";
       };
       const extracted = await new Promise((resolve, reject) => {
         const interval = setInterval(() => {
-          const responseEls = panel.querySelectorAll(SELECTORS.responseContent.join(", "));
-          let currentText = "";
-          if (responseEls.length > 0) {
-            for (let i = responseEls.length - 1; i >= 0; i--) {
-              const raw = (responseEls[i].innerText || responseEls[i].textContent || "").trim();
-              const cleaned = cleanResponseText(raw);
-              if (cleaned.length > 30) {
-                currentText = cleaned;
-                break;
-              }
-            }
-          }
-          if (!currentText) {
-            const allTextEls = panel.querySelectorAll('yt-formatted-string, p, [role="article"], .content');
-            for (let i = allTextEls.length - 1; i >= 0; i--) {
-              const raw = (allTextEls[i].innerText || allTextEls[i].textContent || "").trim();
-              const cleaned = cleanResponseText(raw);
-              if (cleaned.length > 50) {
-                currentText = cleaned;
-                break;
-              }
-            }
-          }
+          const currentText = getFullResponseText();
           const hasLoadingIndicator = Boolean(panel.querySelector(SELECTORS.loadingIndicator.join(", ")));
+          const hasFeedbackButtons = Boolean(panel.querySelector(
+            'button[aria-label*="Good response" i], button[aria-label*="Bad response" i], button[aria-label*="Gute Antwort" i], button[aria-label*="Copy" i], button[aria-label*="Kopieren" i], #feedback-buttons, .feedback-actions'
+          ));
           if (currentText.length > 0) {
             onProgress(`Generiere Zusammenfassung... (${currentText.length} Zeichen)`);
             if (currentText === lastText && !hasLoadingIndicator) {
               stableCount++;
-              if (stableCount >= 4 && currentText.length > 25) {
+              if (hasFeedbackButtons && stableCount >= 3 && currentText.length > 40) {
+                clearInterval(interval);
+                return resolve(currentText);
+              }
+              const trimmed = currentText.trim();
+              const endsIncomplete = trimmed.endsWith(":") || trimmed.endsWith(",") || trimmed.endsWith("...");
+              if (stableCount >= 7 && currentText.length > 40 && !endsIncomplete) {
                 clearInterval(interval);
                 return resolve(currentText);
               }
@@ -635,15 +714,15 @@
               reject(new Error("Zeit\xFCberschreitung beim Warten auf die Gemini-Zusammenfassung."));
             }
           }
-        }, 300);
+        }, 350);
       });
       if (summaryLang === "de" && detectLanguage(extracted) === "en") {
         try {
           onProgress("\xDCbersetze Zusammenfassung auf Deutsch...");
           const translationSubmitted = await this.submitPrompt(panel, "Bitte \xFCbersetze diese Zusammenfassung auf Deutsch.");
           if (translationSubmitted) {
-            await new Promise((r) => setTimeout(r, 1e3));
-            const translated = await this.extractSummaryText(panel, onProgress, 2e4, "auto");
+            await new Promise((r) => setTimeout(r, 1200));
+            const translated = await this.extractSummaryText(panel, onProgress, 25e3, "auto");
             if (translated && detectLanguage(translated) === "de") {
               return translated;
             }
@@ -688,7 +767,9 @@
       if (!rawText || !rawText.trim()) return;
       const detectedLang = detectLanguage(rawText);
       const effectiveLang = this.settings.lang && this.settings.lang !== "auto" ? this.settings.lang : detectedLang === "en" ? "en-US" : "de-DE";
-      const cleaned = sanitizeForSpeech(rawText, effectiveLang.startsWith("en") ? "en" : "de");
+      const cleaned = sanitizeForSpeech(rawText, effectiveLang.startsWith("en") ? "en" : "de", {
+        stripTimestamps: this.settings.stripTimestamps !== false
+      });
       this.chunks = chunkTextForTTS(cleaned, 180);
       this.currentIndex = 0;
       if (this.chunks.length === 0) return;
@@ -1180,6 +1261,8 @@
     resumeVideoAfterTTS: false,
     // Show in-page floating summary button next to YouTube action buttons
     showInPageButton: true,
+    // Strip timestamps like (0:47-2:33) from audio output for fluent speech
+    stripTimestamps: true,
     // Optional Google Cloud Text-to-Speech API key for WaveNet/Neural2 voices
     cloudTtsApiKey: "",
     cloudTtsVoice: "de-DE-Neural2-B",

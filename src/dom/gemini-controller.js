@@ -299,15 +299,16 @@ export class GeminiController {
   }
 
   /**
-   * Waits for Gemini summary generation to finish and returns the extracted text.
-   * If German summary was requested, but Gemini answered in English, automatically translates it into German.
+   * Waits for Gemini summary generation to finish and returns the full extracted text.
+   * Ensures the entire response (including all paragraphs, headlines, and bullet lists)
+   * is captured and generation has fully completed before returning.
    * @param {HTMLElement} panel
    * @param {(status: string) => void} [onProgress]
-   * @param {number} [timeoutMs=35000]
+   * @param {number} [timeoutMs=40000]
    * @param {'de' | 'en' | 'auto'} [summaryLang='de']
    * @returns {Promise<string>}
    */
-  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 35000, summaryLang = 'de') {
+  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 40000, summaryLang = 'de') {
     if (!panel) return '';
 
     const startTime = Date.now();
@@ -328,59 +329,107 @@ export class GeminiController {
       'ai can make mistakes'
     ];
 
-    const cleanResponseText = (text) => {
-      let t = text.trim();
-      const lower = t.toLowerCase();
-      // If the text is merely one of the greeting/chip prompts, ignore it
+    const isIgnoredUI = (t) => {
+      const lower = t.trim().toLowerCase();
       for (const phrase of ignoredPhrases) {
-        if (lower === phrase || (lower.startsWith(phrase) && t.length < phrase.length + 15)) {
-          return '';
+        if (lower === phrase || (lower.startsWith(phrase) && lower.length < phrase.length + 15)) {
+          return true;
         }
       }
-      return t;
+      return false;
+    };
+
+    const cleanResponseText = (text) => {
+      if (!text) return '';
+      let t = text.trim();
+      return isIgnoredUI(t) ? '' : t;
+    };
+
+    // Helper to extract the full response text across all paragraphs and list items
+    const getFullResponseText = () => {
+      // 1. Target the assistant message container (innerText preserves all child blocks and lists)
+      const assistantContainers = panel.querySelectorAll(
+        'ytd-conversational-message-renderer[is-response], ' +
+        'ytd-conversational-message-renderer:not([is-user]), ' +
+        'yt-conversational-response-view-model, ' +
+        'ytd-conversational-response-view-model, ' +
+        '.clarity-summary-renderer, ' +
+        'ytd-ai-summary-renderer'
+      );
+
+      if (assistantContainers.length > 0) {
+        const latest = assistantContainers[assistantContainers.length - 1];
+        const text = (latest.innerText || latest.textContent || '').trim();
+        const cleaned = cleanResponseText(text);
+        if (cleaned.length > 30) {
+          return cleaned;
+        }
+      }
+
+      // 2. Query all content blocks inside [slot="content"] or #content and combine them in order
+      const slot = panel.querySelector('[slot="content"], #content, #chat-history');
+      if (slot) {
+        const blocks = Array.from(slot.querySelectorAll('yt-formatted-string, p, li, [role="article"]'))
+          .map(el => (el.innerText || el.textContent || '').trim())
+          .filter(t => t.length > 0 && !isIgnoredUI(t));
+
+        if (blocks.length > 1) {
+          // Remove sub-blocks contained in parent blocks
+          const uniqueBlocks = blocks.filter((b, idx) => {
+            return !blocks.some((other, oIdx) => oIdx !== idx && other.includes(b) && other.length > b.length);
+          });
+          const combined = uniqueBlocks.join('\n\n').trim();
+          if (combined.length > 30) {
+            return combined;
+          }
+        } else if (blocks.length === 1 && blocks[0].length > 30) {
+          return blocks[0];
+        }
+
+        const raw = (slot.innerText || slot.textContent || '').trim();
+        const cleaned = cleanResponseText(raw);
+        if (cleaned.length > 30) {
+          return cleaned;
+        }
+      }
+
+      return '';
     };
 
     const extracted = await new Promise((resolve, reject) => {
       const interval = setInterval(() => {
-        // Find response container inside the panel
-        const responseEls = panel.querySelectorAll(SELECTORS.responseContent.join(', '));
-        let currentText = '';
-
-        if (responseEls.length > 0) {
-          // Take the latest response node that has actual summary text
-          for (let i = responseEls.length - 1; i >= 0; i--) {
-            const raw = (responseEls[i].innerText || responseEls[i].textContent || '').trim();
-            const cleaned = cleanResponseText(raw);
-            if (cleaned.length > 30) {
-              currentText = cleaned;
-              break;
-            }
-          }
-        }
-
-        // Deep fallback: If no response node matched specific selectors, check message bubbles
-        if (!currentText) {
-          const allTextEls = panel.querySelectorAll('yt-formatted-string, p, [role="article"], .content');
-          for (let i = allTextEls.length - 1; i >= 0; i--) {
-            const raw = (allTextEls[i].innerText || allTextEls[i].textContent || '').trim();
-            const cleaned = cleanResponseText(raw);
-            if (cleaned.length > 50) {
-              currentText = cleaned;
-              break;
-            }
-          }
-        }
+        const currentText = getFullResponseText();
 
         // Check if loading indicators or shimmers are still active
         const hasLoadingIndicator = Boolean(panel.querySelector(SELECTORS.loadingIndicator.join(', ')));
+
+        // Check if rating/feedback buttons appeared below the assistant response
+        const hasFeedbackButtons = Boolean(panel.querySelector(
+          'button[aria-label*="Good response" i], ' +
+          'button[aria-label*="Bad response" i], ' +
+          'button[aria-label*="Gute Antwort" i], ' +
+          'button[aria-label*="Copy" i], ' +
+          'button[aria-label*="Kopieren" i], ' +
+          '#feedback-buttons, ' +
+          '.feedback-actions'
+        ));
 
         if (currentText.length > 0) {
           onProgress(`Generiere Zusammenfassung... (${currentText.length} Zeichen)`);
 
           if (currentText === lastText && !hasLoadingIndicator) {
             stableCount++;
-            // If text has remained stable for ~1.2 seconds and not loading, generation is complete
-            if (stableCount >= 4 && currentText.length > 25) {
+
+            // If feedback buttons are present and text is stable for at least 1s, generation is finished
+            if (hasFeedbackButtons && stableCount >= 3 && currentText.length > 40) {
+              clearInterval(interval);
+              return resolve(currentText);
+            }
+
+            // Otherwise, wait for at least 2.5s (7 checks at 350ms) of stability and ensure text doesn't end on incomplete punctuation
+            const trimmed = currentText.trim();
+            const endsIncomplete = trimmed.endsWith(':') || trimmed.endsWith(',') || trimmed.endsWith('...');
+            if (stableCount >= 7 && currentText.length > 40 && !endsIncomplete) {
               clearInterval(interval);
               return resolve(currentText);
             }
@@ -400,7 +449,7 @@ export class GeminiController {
             reject(new Error('Zeitüberschreitung beim Warten auf die Gemini-Zusammenfassung.'));
           }
         }
-      }, 300);
+      }, 350);
     });
 
     // If German summary was requested, but output is English (e.g. from English chip click), auto-translate
@@ -409,9 +458,9 @@ export class GeminiController {
         onProgress('Übersetze Zusammenfassung auf Deutsch...');
         const translationSubmitted = await this.submitPrompt(panel, 'Bitte übersetze diese Zusammenfassung auf Deutsch.');
         if (translationSubmitted) {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 1200));
           // Wait for German translated text
-          const translated = await this.extractSummaryText(panel, onProgress, 20000, 'auto');
+          const translated = await this.extractSummaryText(panel, onProgress, 25000, 'auto');
           if (translated && detectLanguage(translated) === 'de') {
             return translated;
           }

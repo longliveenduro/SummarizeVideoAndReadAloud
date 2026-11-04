@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS = {
   resumeVideoAfterTTS: false,
   // Show in-page floating summary button next to YouTube action buttons
   showInPageButton: true,
+  // Strip timestamps like (0:47-2:33) from audio output for fluent speech
+  stripTimestamps: true,
   // Optional Google Cloud Text-to-Speech API key for WaveNet/Neural2 voices
   cloudTtsApiKey: '',
   cloudTtsVoice: 'de-DE-Neural2-B',

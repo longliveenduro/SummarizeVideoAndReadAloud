@@ -19,6 +19,8 @@
     resumeVideoAfterTTS: false,
     // Show in-page floating summary button next to YouTube action buttons
     showInPageButton: true,
+    // Strip timestamps like (0:47-2:33) from audio output for fluent speech
+    stripTimestamps: true,
     // Optional Google Cloud Text-to-Speech API key for WaveNet/Neural2 voices
     cloudTtsApiKey: "",
     cloudTtsVoice: "de-DE-Neural2-B",
@@ -82,6 +84,7 @@
     const volumeSlider = document.getElementById("volume-slider");
     const volumeValue = document.getElementById("volume-value");
     const autoPauseVideo = document.getElementById("auto-pause-video");
+    const stripTimestamps = document.getElementById("strip-timestamps");
     const resumeVideo = document.getElementById("resume-video-after-tts");
     const showInPageBtn = document.getElementById("show-in-page-btn");
     const useCloudTts = document.getElementById("use-cloud-tts");
@@ -133,6 +136,7 @@
       volumeSlider.value = s.volume ?? 1;
       volumeValue.textContent = `${Math.round(parseFloat(volumeSlider.value) * 100)}%`;
       autoPauseVideo.checked = Boolean(s.autoPauseVideo);
+      if (stripTimestamps) stripTimestamps.checked = s.stripTimestamps !== false;
       resumeVideo.checked = Boolean(s.resumeVideoAfterTTS);
       showInPageBtn.checked = Boolean(s.showInPageButton);
       useCloudTts.checked = Boolean(s.useCloudTts);
@@ -149,6 +153,7 @@
         pitch: parseFloat(pitchSlider.value),
         volume: parseFloat(volumeSlider.value),
         autoPauseVideo: autoPauseVideo.checked,
+        stripTimestamps: stripTimestamps ? stripTimestamps.checked : true,
         resumeVideoAfterTTS: resumeVideo.checked,
         showInPageButton: showInPageBtn.checked,
         useCloudTts: useCloudTts.checked,

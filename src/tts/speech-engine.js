@@ -38,8 +38,10 @@ export class SpeechEngine {
       ? this.settings.lang
       : (detectedLang === 'en' ? 'en-US' : 'de-DE');
 
-    // Clean text and prepare chunks
-    const cleaned = sanitizeForSpeech(rawText, effectiveLang.startsWith('en') ? 'en' : 'de');
+    // Clean text and prepare chunks (strip timestamps & optimize KI/acronym pronunciation)
+    const cleaned = sanitizeForSpeech(rawText, effectiveLang.startsWith('en') ? 'en' : 'de', {
+      stripTimestamps: this.settings.stripTimestamps !== false
+    });
     this.chunks = chunkTextForTTS(cleaned, 180);
     this.currentIndex = 0;
 

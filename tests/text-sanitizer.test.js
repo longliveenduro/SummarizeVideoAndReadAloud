@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectLanguage,
+  removeTimestamps,
+  optimizePronunciation,
   normalizeTimestamps,
   sanitizeForSpeech,
   chunkTextForTTS
@@ -21,6 +23,43 @@ describe('Text Sanitizer & Processor', () => {
     it('detects German with umlauts', () => {
       const umlautText = 'Schöne Grüße aus München!';
       expect(detectLanguage(umlautText)).toBe('de');
+    });
+  });
+
+  describe('removeTimestamps', () => {
+    it('removes timestamps in parentheses and ranges', () => {
+      const input = 'Sie neigen dazu, Aufgaben zu sabotieren, wenn sie Zielen entgegenstehen (0:47-2:33).';
+      const output = removeTimestamps(input);
+      expect(output).toBe('Sie neigen dazu, Aufgaben zu sabotieren, wenn sie Zielen entgegenstehen.');
+      expect(output).not.toContain('0:47');
+      expect(output).not.toContain('2:33');
+    });
+
+    it('removes multiple single timestamps cleanly without orphan commas', () => {
+      const input = 'Widerstand gegen Abschaltungen (3:14), Versuche, andere KIs zu schützen (3:26), und Fairness (4:16).';
+      const output = removeTimestamps(input);
+      expect(output).toBe('Widerstand gegen Abschaltungen, Versuche, andere KIs zu schützen, und Fairness.');
+    });
+  });
+
+  describe('optimizePronunciation', () => {
+    it('optimizes KI and tech acronyms so German TTS spells them out as K-I', () => {
+      const input = 'Moderne KI-Modelle wie GPT oder Claude und autonome KIs nutzen APIs.';
+      const output = optimizePronunciation(input, 'de');
+      expect(output).toContain('K-I-Modelle');
+      expect(output).toContain('K-Is');
+      expect(output).toContain('G-P-T');
+      expect(output).toContain('A-P-I');
+    });
+
+    it('expands common abbreviations into natural spoken words', () => {
+      const input = 'Ergebnisse z.B. von Anthropic bzw. OpenAI u.a. d.h. etc.';
+      const output = optimizePronunciation(input, 'de');
+      expect(output).toContain('zum Beispiel');
+      expect(output).toContain('beziehungsweise');
+      expect(output).toContain('unter anderem');
+      expect(output).toContain('das heißt');
+      expect(output).toContain('et cetera');
     });
   });
 
@@ -65,6 +104,16 @@ describe('Text Sanitizer & Processor', () => {
 - Drittens: Fazit`;
       const output = sanitizeForSpeech(input, 'de');
       expect(output).toContain('Erstens: Einleitung Zweitens: Hauptteil Drittens: Fazit');
+    });
+
+    it('strips timestamps and tunes KI pronunciation from video summary sentence', () => {
+      const input = 'Zielen übereinstimmen. Anhand verschiedener Forschungsergebnisse wird gezeigt, dass moderne KI-Modelle wie Gemini, GPT oder Claude dazu neigen, Aufgaben zu sabotieren, wenn sie ihren eigenen, internen Zielen entgegenstehen (0:47-2:33).';
+      const output = sanitizeForSpeech(input, 'de');
+      expect(output).toContain('K-I-Modelle');
+      expect(output).toContain('G-P-T');
+      expect(output).toContain('entgegenstehen.');
+      expect(output).not.toContain('0:47');
+      expect(output).not.toContain('2:33');
     });
   });
 

@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const volumeSlider = document.getElementById('volume-slider');
   const volumeValue = document.getElementById('volume-value');
   const autoPauseVideo = document.getElementById('auto-pause-video');
+  const stripTimestamps = document.getElementById('strip-timestamps');
   const resumeVideo = document.getElementById('resume-video-after-tts');
   const showInPageBtn = document.getElementById('show-in-page-btn');
   const useCloudTts = document.getElementById('use-cloud-tts');
@@ -78,6 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     volumeSlider.value = s.volume ?? 1.0;
     volumeValue.textContent = `${Math.round(parseFloat(volumeSlider.value) * 100)}%`;
     autoPauseVideo.checked = Boolean(s.autoPauseVideo);
+    if (stripTimestamps) stripTimestamps.checked = s.stripTimestamps !== false;
     resumeVideo.checked = Boolean(s.resumeVideoAfterTTS);
     showInPageBtn.checked = Boolean(s.showInPageButton);
     useCloudTts.checked = Boolean(s.useCloudTts);
@@ -95,6 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       pitch: parseFloat(pitchSlider.value),
       volume: parseFloat(volumeSlider.value),
       autoPauseVideo: autoPauseVideo.checked,
+      stripTimestamps: stripTimestamps ? stripTimestamps.checked : true,
       resumeVideoAfterTTS: resumeVideo.checked,
       showInPageButton: showInPageBtn.checked,
       useCloudTts: useCloudTts.checked,
