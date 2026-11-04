@@ -121,13 +121,32 @@ function handleTtsSpeak(payload, sendResponse) {
 
   if (voiceName) {
     options.voiceName = voiceName;
-  }
+    try {
+      chrome.tts.speak(text, options);
+    } catch (err) {
+      console.error('[YT-Gemini-TTS] chrome.tts.speak exception:', err);
+      sendResponse({ error: err.message });
+    }
+  } else {
+    // If no specific voiceName is chosen, prefer official Google voice for this language
+    chrome.tts.getVoices((voices) => {
+      const targetLang = options.lang || 'de-DE';
+      const langPrefix = targetLang.split('-')[0].toLowerCase();
+      const googleVoice = voices?.find((v) =>
+        v.lang && v.lang.toLowerCase().startsWith(langPrefix) && v.voiceName.toLowerCase().includes('google')
+      );
 
-  try {
-    chrome.tts.speak(text, options);
-  } catch (err) {
-    console.error('[YT-Gemini-TTS] chrome.tts.speak exception:', err);
-    sendResponse({ error: err.message });
+      if (googleVoice) {
+        options.voiceName = googleVoice.voiceName;
+      }
+
+      try {
+        chrome.tts.speak(text, options);
+      } catch (err) {
+        console.error('[YT-Gemini-TTS] chrome.tts.speak exception:', err);
+        sendResponse({ error: err.message });
+      }
+    });
   }
 }
 

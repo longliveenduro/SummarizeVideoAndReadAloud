@@ -1,10 +1,12 @@
 (() => {
   // src/utils/storage.js
   var DEFAULT_SETTINGS = {
-    // Voice selection (empty string means auto-select Google voice for current language)
+    // Summary language requested from Gemini ('de', 'en', 'auto')
+    summaryLang: "de",
+    // Voice selection (empty string means auto-select best Google voice for preferred language)
     voiceName: "",
-    // Preferred language ('auto', 'de-DE', 'en-US', etc.)
-    lang: "auto",
+    // Preferred TTS language ('de-DE' by default, or 'en-US', 'auto', etc.)
+    lang: "de-DE",
     // Speech rate: 0.5 to 2.0 (1.0 = normal)
     rate: 1,
     // Speech pitch: 0.5 to 1.5 (1.0 = normal)
@@ -70,6 +72,7 @@
 
   // options/options.js
   document.addEventListener("DOMContentLoaded", async () => {
+    const summaryLangSelect = document.getElementById("summary-lang-select");
     const voiceSelect = document.getElementById("voice-select");
     const langSelect = document.getElementById("lang-select");
     const rateSlider = document.getElementById("rate-slider");
@@ -120,8 +123,9 @@
       }
     });
     function applySettingsToUI(s) {
+      if (summaryLangSelect) summaryLangSelect.value = s.summaryLang || "de";
       if (s.voiceName) voiceSelect.value = s.voiceName;
-      if (s.lang) langSelect.value = s.lang;
+      if (s.lang) langSelect.value = s.lang || "de-DE";
       rateSlider.value = s.rate || 1;
       rateValue.textContent = `${parseFloat(rateSlider.value).toFixed(1)}x`;
       pitchSlider.value = s.pitch || 1;
@@ -138,6 +142,7 @@
     }
     function getSettingsFromUI() {
       return {
+        summaryLang: summaryLangSelect ? summaryLangSelect.value : "de",
         voiceName: voiceSelect.value,
         lang: langSelect.value,
         rate: parseFloat(rateSlider.value),

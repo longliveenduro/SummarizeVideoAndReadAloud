@@ -99,6 +99,8 @@ Um die Konfiguration anzupassen:
 - **Möglichkeit 2:** Klicke im schwebenden HUD auf YouTube auf das Zahnrad-Symbol (⚙️).
 
 In der Konfiguration kannst du festlegen:
+- **Zusammenfassungs-Sprache:** Standardmäßig auf **Deutsch** voreingestellt. Selbst englischsprachige Videos werden von Gemini automatisch auf Deutsch zusammengefasst (konfigurierbar auf Deutsch, Englisch oder Video-Originalsprache).
+- **Vorlese-Sprache:** Standardmäßig auf **Deutsch (de-DE)** voreingestellt. Die Zusammenfassung wird unabhängig von der Video-Originalsprache flüssig mit einer deutschen Google-Stimme vorgelesen.
 - **Stimme:** Beliebige auf dem Ubuntu-System oder in Chrome registrierte Google-Stimme auswählen (z. B. `Google Deutsch`, `Google US English`).
 - **Probe hören:** Ein Klick auf „🔊 Testen“ spielt sofort eine Sprachprobe ab.
 - **Sprechtempo & Tonhöhe:** Stufenlos per Schieberegler von 0.5x bis 2.0x anpassen.

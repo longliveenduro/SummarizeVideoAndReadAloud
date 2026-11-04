@@ -2,10 +2,12 @@
  * Default configuration settings for the YouTube Gemini Summarizer & TTS extension.
  */
 export const DEFAULT_SETTINGS = {
-  // Voice selection (empty string means auto-select Google voice for current language)
+  // Summary language requested from Gemini ('de', 'en', 'auto')
+  summaryLang: 'de',
+  // Voice selection (empty string means auto-select best Google voice for preferred language)
   voiceName: '',
-  // Preferred language ('auto', 'de-DE', 'en-US', etc.)
-  lang: 'auto',
+  // Preferred TTS language ('de-DE' by default, or 'en-US', 'auto', etc.)
+  lang: 'de-DE',
   // Speech rate: 0.5 to 2.0 (1.0 = normal)
   rate: 1.0,
   // Speech pitch: 0.5 to 1.5 (1.0 = normal)

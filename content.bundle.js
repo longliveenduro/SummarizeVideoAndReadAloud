@@ -173,6 +173,138 @@
     return true;
   }
 
+  // src/tts/text-sanitizer.js
+  function detectLanguage(text) {
+    if (!text || typeof text !== "string") return "auto";
+    const lower = text.toLowerCase();
+    const germanMarkers = [" und ", " der ", " die ", " das ", " ist ", " nicht ", " eine ", " einen ", " f\xFCr ", " video ", " zusammenfassung "];
+    const englishMarkers = [" and ", " the ", " is ", " not ", " a ", " an ", " for ", " video ", " summary ", " about ", " with "];
+    let deScore = 0;
+    let enScore = 0;
+    for (const marker of germanMarkers) {
+      if (lower.includes(marker)) deScore++;
+    }
+    for (const marker of englishMarkers) {
+      if (lower.includes(marker)) enScore++;
+    }
+    if (/[äöüßÄÖÜ]/.test(text)) {
+      deScore += 3;
+    }
+    if (deScore > enScore) return "de";
+    if (enScore > deScore) return "en";
+    return "auto";
+  }
+  function normalizeTimestamps(text, lang = "de") {
+    if (!text) return "";
+    return text.replace(/\b(\d{1,2}):(\d{2}):(\d{2})\b/g, (_match, h, m, s) => {
+      const hours = parseInt(h, 10);
+      const minutes = parseInt(m, 10);
+      const seconds = parseInt(s, 10);
+      if (lang === "de") {
+        return `${hours} Stunden, ${minutes} Minuten und ${seconds} Sekunden`;
+      }
+      return `${hours} hours, ${minutes} minutes and ${seconds} seconds`;
+    }).replace(/\b(\d{1,2}):(\d{2})\b/g, (_match, m, s) => {
+      const minutes = parseInt(m, 10);
+      const seconds = parseInt(s, 10);
+      if (lang === "de") {
+        return `${minutes} Minuten und ${seconds} Sekunden`;
+      }
+      return `${minutes} minutes and ${seconds} seconds`;
+    });
+  }
+  function sanitizeForSpeech(text, lang = "de") {
+    if (!text || typeof text !== "string") return "";
+    let cleaned = text;
+    cleaned = cleaned.replace(/https?:\/\/\S+/gi, lang === "de" ? "Weblink" : "link");
+    cleaned = normalizeTimestamps(cleaned, lang);
+    cleaned = cleaned.replace(/^#{1,6}\s*(.+)$/gm, "$1.");
+    cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1");
+    cleaned = cleaned.replace(/\*([^*]+)\*/g, "$1");
+    cleaned = cleaned.replace(/__([^_]+)__/g, "$1");
+    cleaned = cleaned.replace(/_([^_]+)_/g, "$1");
+    cleaned = cleaned.replace(/^\s*>\s*/gm, "");
+    cleaned = cleaned.replace(/^\s*[-*•]\s+/gm, " ");
+    cleaned = cleaned.replace(/^\s*(\d+)\.\s+/gm, "$1. ");
+    cleaned = cleaned.replace(/`([^`]+)`/g, "$1");
+    cleaned = cleaned.replace(/[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, "");
+    cleaned = cleaned.replace(/[\[\]{}()]/g, " ");
+    cleaned = cleaned.replace(/\.{2,}/g, ".");
+    cleaned = cleaned.replace(/!{2,}/g, "!");
+    cleaned = cleaned.replace(/\?{2,}/g, "?");
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    return cleaned;
+  }
+  function chunkTextForTTS(text, maxChunkLength = 180) {
+    if (!text || typeof text !== "string") return [];
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    if (trimmed.length <= maxChunkLength) {
+      return [trimmed];
+    }
+    const sentenceRegex = /([^.!?;\n]+[.!?;\n]+)/g;
+    const rawSentences = trimmed.match(sentenceRegex) || [trimmed];
+    const remaining = trimmed.replace(sentenceRegex, "").trim();
+    if (remaining) {
+      rawSentences.push(remaining);
+    }
+    const chunks = [];
+    let currentChunk = "";
+    for (let rawSentence of rawSentences) {
+      let sentence = rawSentence.trim();
+      if (!sentence) continue;
+      if (sentence.length > maxChunkLength) {
+        if (currentChunk) {
+          chunks.push(currentChunk.trim());
+          currentChunk = "";
+        }
+        const clauses = sentence.split(/([,:]\s+)/);
+        let subChunk = "";
+        for (let clause of clauses) {
+          if (!clause) continue;
+          if ((subChunk + clause).length > maxChunkLength) {
+            if (subChunk.trim()) {
+              chunks.push(subChunk.trim());
+            }
+            if (clause.length > maxChunkLength) {
+              const words = clause.split(/\s+/);
+              let wordChunk = "";
+              for (let word of words) {
+                if ((wordChunk + " " + word).length > maxChunkLength) {
+                  if (wordChunk.trim()) chunks.push(wordChunk.trim());
+                  wordChunk = word;
+                } else {
+                  wordChunk += (wordChunk ? " " : "") + word;
+                }
+              }
+              subChunk = wordChunk;
+            } else {
+              subChunk = clause;
+            }
+          } else {
+            subChunk += clause;
+          }
+        }
+        if (subChunk.trim()) {
+          chunks.push(subChunk.trim());
+        }
+      } else {
+        if ((currentChunk + " " + sentence).length > maxChunkLength) {
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk.trim());
+          }
+          currentChunk = sentence;
+        } else {
+          currentChunk += (currentChunk ? " " : "") + sentence;
+        }
+      }
+    }
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    return chunks;
+  }
+
   // src/dom/gemini-controller.js
   var GeminiController = class {
     constructor(options = {}) {
@@ -332,18 +464,13 @@
       return null;
     }
     /**
-     * Triggers the "Summarize" chip or enters prompt inside the panel.
+     * Submits a text prompt into the conversational AI chat input at the bottom of the panel.
      * @param {HTMLElement} panel
+     * @param {string} promptText
      * @returns {Promise<boolean>}
      */
-    async triggerSummaryChip(panel) {
-      if (!panel) return false;
-      const chipWaitTimeout = Math.min(this.timeout, 5e3);
-      const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
-      if (chip) {
-        simulateClick(chip);
-        return true;
-      }
+    async submitPrompt(panel, promptText) {
+      if (!panel || !promptText) return false;
       const inputSelectors = [
         "textarea#input",
         'div#input[contenteditable="true"]',
@@ -358,18 +485,19 @@
         inputField = panel.querySelector(sel);
         if (inputField) break;
       }
-      if (inputField) {
-        const promptText = "Summarise the video";
+      if (!inputField) return false;
+      try {
+        inputField.focus();
         if (inputField.isContentEditable || inputField.tagName === "DIV") {
-          inputField.focus();
           inputField.textContent = promptText;
+          inputField.innerText = promptText;
           inputField.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, data: promptText }));
         } else {
-          inputField.focus();
           inputField.value = promptText;
           inputField.dispatchEvent(new Event("input", { bubbles: true }));
           inputField.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        await new Promise((r) => setTimeout(r, 100));
         const enterOptions = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true };
         inputField.dispatchEvent(new KeyboardEvent("keydown", enterOptions));
         inputField.dispatchEvent(new KeyboardEvent("keypress", enterOptions));
@@ -391,18 +519,47 @@
           }
         }
         return true;
+      } catch (err) {
+        console.warn("[YT-Gemini-TTS] submitPrompt error:", err);
+        return false;
       }
-      return false;
+    }
+    /**
+     * Triggers the "Summarize" chip or enters localized prompt inside the panel.
+     * If German summary is requested (default), asks Gemini in German to ensure German output even for English videos.
+     * @param {HTMLElement} panel
+     * @param {'de' | 'en' | 'auto'} [summaryLang='de']
+     * @returns {Promise<boolean>}
+     */
+    async triggerSummaryChip(panel, summaryLang = "de") {
+      if (!panel) return false;
+      if (summaryLang === "de") {
+        const germanPrompt = "Fasse dieses Video auf Deutsch zusammen.";
+        const submitted = await this.submitPrompt(panel, germanPrompt);
+        if (submitted) {
+          return true;
+        }
+      }
+      const chipWaitTimeout = Math.min(this.timeout, 5e3);
+      const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
+      if (chip) {
+        simulateClick(chip);
+        return true;
+      }
+      const promptText = summaryLang === "de" ? "Fasse dieses Video auf Deutsch zusammen." : summaryLang === "en" ? "Summarise this video in English." : "Summarise the video";
+      return this.submitPrompt(panel, promptText);
     }
     /**
      * Waits for Gemini summary generation to finish and returns the extracted text.
+     * If German summary was requested, but Gemini answered in English, automatically translates it into German.
      * @param {HTMLElement} panel
      * @param {(status: string) => void} [onProgress]
      * @param {number} [timeoutMs=35000]
+     * @param {'de' | 'en' | 'auto'} [summaryLang='de']
      * @returns {Promise<string>}
      */
     async extractSummaryText(panel, onProgress = () => {
-    }, timeoutMs = 35e3) {
+    }, timeoutMs = 35e3, summaryLang = "de") {
       if (!panel) return "";
       const startTime = Date.now();
       let lastText = "";
@@ -413,6 +570,7 @@
         "not sure what to ask? choose something",
         "summarise the video",
         "summarize the video",
+        "fasse dieses video auf deutsch zusammen",
         "recommend related content",
         "how should we control ai?",
         "ask a question",
@@ -428,7 +586,7 @@
         }
         return t;
       };
-      return new Promise((resolve, reject) => {
+      const extracted = await new Promise((resolve, reject) => {
         const interval = setInterval(() => {
           const responseEls = panel.querySelectorAll(SELECTORS.responseContent.join(", "));
           let currentText = "";
@@ -479,140 +637,24 @@
           }
         }, 300);
       });
+      if (summaryLang === "de" && detectLanguage(extracted) === "en") {
+        try {
+          onProgress("\xDCbersetze Zusammenfassung auf Deutsch...");
+          const translationSubmitted = await this.submitPrompt(panel, "Bitte \xFCbersetze diese Zusammenfassung auf Deutsch.");
+          if (translationSubmitted) {
+            await new Promise((r) => setTimeout(r, 1e3));
+            const translated = await this.extractSummaryText(panel, onProgress, 2e4, "auto");
+            if (translated && detectLanguage(translated) === "de") {
+              return translated;
+            }
+          }
+        } catch (err) {
+          console.warn("[YT-Gemini-TTS] Auto-translation fallback failed:", err);
+        }
+      }
+      return extracted;
     }
   };
-
-  // src/tts/text-sanitizer.js
-  function detectLanguage(text) {
-    if (!text || typeof text !== "string") return "auto";
-    const lower = text.toLowerCase();
-    const germanMarkers = [" und ", " der ", " die ", " das ", " ist ", " nicht ", " eine ", " einen ", " f\xFCr ", " video ", " zusammenfassung "];
-    const englishMarkers = [" and ", " the ", " is ", " not ", " a ", " an ", " for ", " video ", " summary ", " about ", " with "];
-    let deScore = 0;
-    let enScore = 0;
-    for (const marker of germanMarkers) {
-      if (lower.includes(marker)) deScore++;
-    }
-    for (const marker of englishMarkers) {
-      if (lower.includes(marker)) enScore++;
-    }
-    if (/[äöüßÄÖÜ]/.test(text)) {
-      deScore += 3;
-    }
-    if (deScore > enScore) return "de";
-    if (enScore > deScore) return "en";
-    return "auto";
-  }
-  function normalizeTimestamps(text, lang = "de") {
-    if (!text) return "";
-    return text.replace(/\b(\d{1,2}):(\d{2}):(\d{2})\b/g, (_match, h, m, s) => {
-      const hours = parseInt(h, 10);
-      const minutes = parseInt(m, 10);
-      const seconds = parseInt(s, 10);
-      if (lang === "de") {
-        return `${hours} Stunden, ${minutes} Minuten und ${seconds} Sekunden`;
-      }
-      return `${hours} hours, ${minutes} minutes and ${seconds} seconds`;
-    }).replace(/\b(\d{1,2}):(\d{2})\b/g, (_match, m, s) => {
-      const minutes = parseInt(m, 10);
-      const seconds = parseInt(s, 10);
-      if (lang === "de") {
-        return `${minutes} Minuten und ${seconds} Sekunden`;
-      }
-      return `${minutes} minutes and ${seconds} seconds`;
-    });
-  }
-  function sanitizeForSpeech(text, lang = "de") {
-    if (!text || typeof text !== "string") return "";
-    let cleaned = text;
-    cleaned = cleaned.replace(/https?:\/\/\S+/gi, lang === "de" ? "Weblink" : "link");
-    cleaned = normalizeTimestamps(cleaned, lang);
-    cleaned = cleaned.replace(/^#{1,6}\s*(.+)$/gm, "$1.");
-    cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1");
-    cleaned = cleaned.replace(/\*([^*]+)\*/g, "$1");
-    cleaned = cleaned.replace(/__([^_]+)__/g, "$1");
-    cleaned = cleaned.replace(/_([^_]+)_/g, "$1");
-    cleaned = cleaned.replace(/^\s*>\s*/gm, "");
-    cleaned = cleaned.replace(/^\s*[-*•]\s+/gm, " ");
-    cleaned = cleaned.replace(/^\s*(\d+)\.\s+/gm, "$1. ");
-    cleaned = cleaned.replace(/`([^`]+)`/g, "$1");
-    cleaned = cleaned.replace(/[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, "");
-    cleaned = cleaned.replace(/[\[\]{}()]/g, " ");
-    cleaned = cleaned.replace(/\.{2,}/g, ".");
-    cleaned = cleaned.replace(/!{2,}/g, "!");
-    cleaned = cleaned.replace(/\?{2,}/g, "?");
-    cleaned = cleaned.replace(/\s+/g, " ").trim();
-    return cleaned;
-  }
-  function chunkTextForTTS(text, maxChunkLength = 180) {
-    if (!text || typeof text !== "string") return [];
-    const trimmed = text.trim();
-    if (!trimmed) return [];
-    if (trimmed.length <= maxChunkLength) {
-      return [trimmed];
-    }
-    const sentenceRegex = /([^.!?;\n]+[.!?;\n]+)/g;
-    const rawSentences = trimmed.match(sentenceRegex) || [trimmed];
-    const remaining = trimmed.replace(sentenceRegex, "").trim();
-    if (remaining) {
-      rawSentences.push(remaining);
-    }
-    const chunks = [];
-    let currentChunk = "";
-    for (let rawSentence of rawSentences) {
-      let sentence = rawSentence.trim();
-      if (!sentence) continue;
-      if (sentence.length > maxChunkLength) {
-        if (currentChunk) {
-          chunks.push(currentChunk.trim());
-          currentChunk = "";
-        }
-        const clauses = sentence.split(/([,:]\s+)/);
-        let subChunk = "";
-        for (let clause of clauses) {
-          if (!clause) continue;
-          if ((subChunk + clause).length > maxChunkLength) {
-            if (subChunk.trim()) {
-              chunks.push(subChunk.trim());
-            }
-            if (clause.length > maxChunkLength) {
-              const words = clause.split(/\s+/);
-              let wordChunk = "";
-              for (let word of words) {
-                if ((wordChunk + " " + word).length > maxChunkLength) {
-                  if (wordChunk.trim()) chunks.push(wordChunk.trim());
-                  wordChunk = word;
-                } else {
-                  wordChunk += (wordChunk ? " " : "") + word;
-                }
-              }
-              subChunk = wordChunk;
-            } else {
-              subChunk = clause;
-            }
-          } else {
-            subChunk += clause;
-          }
-        }
-        if (subChunk.trim()) {
-          chunks.push(subChunk.trim());
-        }
-      } else {
-        if ((currentChunk + " " + sentence).length > maxChunkLength) {
-          if (currentChunk.trim()) {
-            chunks.push(currentChunk.trim());
-          }
-          currentChunk = sentence;
-        } else {
-          currentChunk += (currentChunk ? " " : "") + sentence;
-        }
-      }
-    }
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
-    }
-    return chunks;
-  }
 
   // src/tts/speech-engine.js
   var SpeechEngine = class {
@@ -1120,10 +1162,12 @@
 
   // src/utils/storage.js
   var DEFAULT_SETTINGS = {
-    // Voice selection (empty string means auto-select Google voice for current language)
+    // Summary language requested from Gemini ('de', 'en', 'auto')
+    summaryLang: "de",
+    // Voice selection (empty string means auto-select best Google voice for preferred language)
     voiceName: "",
-    // Preferred language ('auto', 'de-DE', 'en-US', etc.)
-    lang: "auto",
+    // Preferred TTS language ('de-DE' by default, or 'en-US', 'auto', etc.)
+    lang: "de-DE",
     // Speech rate: 0.5 to 2.0 (1.0 = normal)
     rate: 1,
     // Speech pitch: 0.5 to 1.5 (1.0 = normal)
@@ -1288,7 +1332,8 @@
         return;
       }
       hud.setStatus("Starte Video-Zusammenfassung...", true);
-      const triggered = await controller.triggerSummaryChip(panel);
+      const summaryLang = currentSettings.summaryLang || "de";
+      const triggered = await controller.triggerSummaryChip(panel, summaryLang);
       if (!triggered) {
         hud.setStatus("Konnte den Zusammenfassen-Befehl nicht senden.", false);
         isProcessing = false;
@@ -1297,7 +1342,7 @@
       hud.setStatus("Gemini generiert Zusammenfassung...", true);
       const summaryText = await controller.extractSummaryText(panel, (status) => {
         hud.setStatus(status, true);
-      });
+      }, 35e3, summaryLang);
       if (!summaryText) {
         hud.setStatus("Kein Zusammenfassungstext empfangen.", false);
         isProcessing = false;

@@ -150,7 +150,7 @@ describe('GeminiController & DOM Automation', () => {
       expect(chip.id).toBe('de-chip');
     });
 
-    it('falls back to input box when no chip is present', async () => {
+    it('falls back to input box and enters German prompt by default', async () => {
       const panel = document.createElement('div');
       panel.innerHTML = `
         <div class="chat-input-area">
@@ -162,13 +162,30 @@ describe('GeminiController & DOM Automation', () => {
       `;
       document.body.appendChild(panel);
 
-      const sendBtn = panel.querySelector('button');
-      const clickSpy = vi.spyOn(sendBtn, 'click');
-      const triggered = await controller.triggerSummaryChip(panel);
+      const triggered = await controller.triggerSummaryChip(panel, 'de');
 
       expect(triggered).toBe(true);
       const inputEl = panel.querySelector('#input');
-      expect(inputEl.value).toBe('Summarise the video');
+      expect(inputEl.value).toBe('Fasse dieses Video auf Deutsch zusammen.');
+    });
+
+    it('falls back to input box and enters English prompt when configured', async () => {
+      const panel = document.createElement('div');
+      panel.innerHTML = `
+        <div class="chat-input-area">
+          <input type="text" id="input" />
+          <div id="send-button">
+            <button aria-label="Send">Send</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(panel);
+
+      const triggered = await controller.triggerSummaryChip(panel, 'en');
+
+      expect(triggered).toBe(true);
+      const inputEl = panel.querySelector('#input');
+      expect(inputEl.value).toBe('Summarise this video in English.');
     });
   });
 

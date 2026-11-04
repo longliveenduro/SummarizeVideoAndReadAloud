@@ -160,7 +160,8 @@ export async function executeWorkflow() {
     }
 
     hud.setStatus('Starte Video-Zusammenfassung...', true);
-    const triggered = await controller.triggerSummaryChip(panel);
+    const summaryLang = currentSettings.summaryLang || 'de';
+    const triggered = await controller.triggerSummaryChip(panel, summaryLang);
     if (!triggered) {
       hud.setStatus('Konnte den Zusammenfassen-Befehl nicht senden.', false);
       isProcessing = false;
@@ -170,7 +171,7 @@ export async function executeWorkflow() {
     hud.setStatus('Gemini generiert Zusammenfassung...', true);
     const summaryText = await controller.extractSummaryText(panel, (status) => {
       hud.setStatus(status, true);
-    });
+    }, 35000, summaryLang);
 
     if (!summaryText) {
       hud.setStatus('Kein Zusammenfassungstext empfangen.', false);

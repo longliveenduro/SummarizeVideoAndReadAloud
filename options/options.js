@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, getSettings, resetSettings, saveSettings } from '../src/utils/storage.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const summaryLangSelect = document.getElementById('summary-lang-select');
   const voiceSelect = document.getElementById('voice-select');
   const langSelect = document.getElementById('lang-select');
   const rateSlider = document.getElementById('rate-slider');
@@ -67,8 +68,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   function applySettingsToUI(s) {
+    if (summaryLangSelect) summaryLangSelect.value = s.summaryLang || 'de';
     if (s.voiceName) voiceSelect.value = s.voiceName;
-    if (s.lang) langSelect.value = s.lang;
+    if (s.lang) langSelect.value = s.lang || 'de-DE';
     rateSlider.value = s.rate || 1.0;
     rateValue.textContent = `${parseFloat(rateSlider.value).toFixed(1)}x`;
     pitchSlider.value = s.pitch || 1.0;
@@ -86,6 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function getSettingsFromUI() {
     return {
+      summaryLang: summaryLangSelect ? summaryLangSelect.value : 'de',
       voiceName: voiceSelect.value,
       lang: langSelect.value,
       rate: parseFloat(rateSlider.value),

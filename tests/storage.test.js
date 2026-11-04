@@ -43,7 +43,8 @@ describe('Storage Utility', () => {
     await saveSettings({ rate: 2.0, lang: 'en-US' }, fakeChrome);
     const reset = await resetSettings(fakeChrome);
     expect(reset.rate).toBe(1.0);
-    expect(reset.lang).toBe('auto');
+    expect(reset.lang).toBe('de-DE');
+    expect(reset.summaryLang).toBe('de');
   });
 
   it('should fallback gracefully when chrome.storage is unavailable', async () => {

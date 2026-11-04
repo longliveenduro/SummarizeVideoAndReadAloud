@@ -19,36 +19,56 @@
     </header>
 
     <main class="main">
-      <!-- Section 1: Google TTS Voice & Audio Settings -->
+      <!-- Section 1: Gemini & Sprach-Konfiguration -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-icon">🌐</span>
+          <h2>Spracheinstellungen (Gemini & Vorlesen)</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="summary-lang-select">Zusammenfassungs-Sprache (Gemini AI):</label>
+            <select id="summary-lang-select" class="form-control">
+              <option value="de">Deutsch (Standard – fasst auch englische Videos auf Deutsch zusammen)</option>
+              <option value="en">Englisch (Summarise in English)</option>
+              <option value="auto">Automatisch / Originalsprache des Videos</option>
+            </select>
+            <small class="hint">Bestimmt, in welcher Sprache YouTube Gemini die Zusammenfassung verfasst.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="lang-select">Vorlese-Sprache (Google TTS):</label>
+            <select id="lang-select" class="form-control">
+              <option value="de-DE">Deutsch (Standard – de-DE)</option>
+              <option value="en-US">Englisch (en-US)</option>
+              <option value="en-GB">Englisch UK (en-GB)</option>
+              <option value="auto">Automatische Erkennung basierend auf Text</option>
+              <option value="fr-FR">Französisch (fr-FR)</option>
+              <option value="es-ES">Spanisch (es-ES)</option>
+            </select>
+            <small class="hint">Sprache, mit der Google Text-to-Speech die Zusammenfassung vorliest.</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Google TTS Voice & Audio Settings -->
       <section class="card">
         <div class="card-header">
           <span class="card-icon">🔊</span>
-          <h2>Google Text-to-Speech Einstellungen</h2>
+          <h2>Google Text-to-Speech Stimmen- & Audioeinstellungen</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
             <label for="voice-select">Stimme auswählen:</label>
             <div class="voice-row">
               <select id="voice-select" class="form-control">
-                <option value="">(Automatisch – Beste Google-Stimme)</option>
+                <option value="">(Automatisch – Beste deutsche Google-Stimme)</option>
               </select>
               <button id="btn-test-voice" type="button" class="btn btn-secondary">
                 🔊 Testen
               </button>
             </div>
             <small class="hint">Google Chrome stellt auf Ubuntu/Linux integrierte Google-Stimmen („Google Deutsch“, „Google US English“ etc.) bereit.</small>
-          </div>
-
-          <div class="form-group">
-            <label for="lang-select">Bevorzugte Sprache:</label>
-            <select id="lang-select" class="form-control">
-              <option value="auto">Automatische Erkennung (Empfohlen)</option>
-              <option value="de-DE">Deutsch (de-DE)</option>
-              <option value="en-US">Englisch (en-US)</option>
-              <option value="en-GB">Englisch UK (en-GB)</option>
-              <option value="fr-FR">Französisch (fr-FR)</option>
-              <option value="es-ES">Spanisch (es-ES)</option>
-            </select>
           </div>
 
           <div class="form-row">

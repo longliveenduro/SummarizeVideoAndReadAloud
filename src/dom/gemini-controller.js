@@ -1,4 +1,5 @@
 import { SELECTORS, findAskButton, findSummarizeChip, simulateClick } from './selectors.js';
+import { detectLanguage } from '../tts/text-sanitizer.js';
 
 export class GeminiController {
   constructor(options = {}) {
@@ -188,22 +189,14 @@ export class GeminiController {
   }
 
   /**
-   * Triggers the "Summarize" chip or enters prompt inside the panel.
+   * Submits a text prompt into the conversational AI chat input at the bottom of the panel.
    * @param {HTMLElement} panel
+   * @param {string} promptText
    * @returns {Promise<boolean>}
    */
-  async triggerSummaryChip(panel) {
-    if (!panel) return false;
+  async submitPrompt(panel, promptText) {
+    if (!panel || !promptText) return false;
 
-    // 1. Wait for and click the summary chip (supports British "Summarise", American "Summarize", German "Zusammenfassen")
-    const chipWaitTimeout = Math.min(this.timeout, 5000);
-    const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
-    if (chip) {
-      simulateClick(chip);
-      return true;
-    }
-
-    // 2. Fallback: If chip is not present or already clicked, use the text input at the bottom of the panel
     const inputSelectors = [
       'textarea#input',
       'div#input[contenteditable="true"]',
@@ -220,19 +213,23 @@ export class GeminiController {
       if (inputField) break;
     }
 
-    if (inputField) {
-      const promptText = 'Summarise the video';
+    if (!inputField) return false;
+
+    try {
+      inputField.focus();
 
       if (inputField.isContentEditable || inputField.tagName === 'DIV') {
-        inputField.focus();
         inputField.textContent = promptText;
+        inputField.innerText = promptText;
         inputField.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: promptText }));
       } else {
-        inputField.focus();
         inputField.value = promptText;
         inputField.dispatchEvent(new Event('input', { bubbles: true }));
         inputField.dispatchEvent(new Event('change', { bubbles: true }));
       }
+
+      // Allow DOM to register text changes
+      await new Promise(r => setTimeout(r, 100));
 
       // Try hitting Enter key
       const enterOptions = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true };
@@ -260,19 +257,57 @@ export class GeminiController {
       }
 
       return true;
+    } catch (err) {
+      console.warn('[YT-Gemini-TTS] submitPrompt error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Triggers the "Summarize" chip or enters localized prompt inside the panel.
+   * If German summary is requested (default), asks Gemini in German to ensure German output even for English videos.
+   * @param {HTMLElement} panel
+   * @param {'de' | 'en' | 'auto'} [summaryLang='de']
+   * @returns {Promise<boolean>}
+   */
+  async triggerSummaryChip(panel, summaryLang = 'de') {
+    if (!panel) return false;
+
+    // 1. If German is preferred, prioritize asking Gemini in German so English videos are summarized in German
+    if (summaryLang === 'de') {
+      const germanPrompt = 'Fasse dieses Video auf Deutsch zusammen.';
+      const submitted = await this.submitPrompt(panel, germanPrompt);
+      if (submitted) {
+        return true;
+      }
     }
 
-    return false;
+    // 2. Wait for and click the summary chip (e.g. "Summarise the video", "Video zusammenfassen")
+    const chipWaitTimeout = Math.min(this.timeout, 5000);
+    const chip = await this.waitFor(() => findSummarizeChip(panel), chipWaitTimeout);
+    if (chip) {
+      simulateClick(chip);
+      return true;
+    }
+
+    // 3. Fallback: Use the text input at the bottom of the panel
+    const promptText = (summaryLang === 'de')
+      ? 'Fasse dieses Video auf Deutsch zusammen.'
+      : (summaryLang === 'en' ? 'Summarise this video in English.' : 'Summarise the video');
+
+    return this.submitPrompt(panel, promptText);
   }
 
   /**
    * Waits for Gemini summary generation to finish and returns the extracted text.
+   * If German summary was requested, but Gemini answered in English, automatically translates it into German.
    * @param {HTMLElement} panel
    * @param {(status: string) => void} [onProgress]
    * @param {number} [timeoutMs=35000]
+   * @param {'de' | 'en' | 'auto'} [summaryLang='de']
    * @returns {Promise<string>}
    */
-  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 35000) {
+  async extractSummaryText(panel, onProgress = () => {}, timeoutMs = 35000, summaryLang = 'de') {
     if (!panel) return '';
 
     const startTime = Date.now();
@@ -286,6 +321,7 @@ export class GeminiController {
       'not sure what to ask? choose something',
       'summarise the video',
       'summarize the video',
+      'fasse dieses video auf deutsch zusammen',
       'recommend related content',
       'how should we control ai?',
       'ask a question',
@@ -297,14 +333,14 @@ export class GeminiController {
       const lower = t.toLowerCase();
       // If the text is merely one of the greeting/chip prompts, ignore it
       for (const phrase of ignoredPhrases) {
-        if (lower === phrase || lower.startsWith(phrase) && t.length < phrase.length + 15) {
+        if (lower === phrase || (lower.startsWith(phrase) && t.length < phrase.length + 15)) {
           return '';
         }
       }
       return t;
     };
 
-    return new Promise((resolve, reject) => {
+    const extracted = await new Promise((resolve, reject) => {
       const interval = setInterval(() => {
         // Find response container inside the panel
         const responseEls = panel.querySelectorAll(SELECTORS.responseContent.join(', '));
@@ -366,5 +402,25 @@ export class GeminiController {
         }
       }, 300);
     });
+
+    // If German summary was requested, but output is English (e.g. from English chip click), auto-translate
+    if (summaryLang === 'de' && detectLanguage(extracted) === 'en') {
+      try {
+        onProgress('Übersetze Zusammenfassung auf Deutsch...');
+        const translationSubmitted = await this.submitPrompt(panel, 'Bitte übersetze diese Zusammenfassung auf Deutsch.');
+        if (translationSubmitted) {
+          await new Promise(r => setTimeout(r, 1000));
+          // Wait for German translated text
+          const translated = await this.extractSummaryText(panel, onProgress, 20000, 'auto');
+          if (translated && detectLanguage(translated) === 'de') {
+            return translated;
+          }
+        }
+      } catch (err) {
+        console.warn('[YT-Gemini-TTS] Auto-translation fallback failed:', err);
+      }
+    }
+
+    return extracted;
   }
 }
