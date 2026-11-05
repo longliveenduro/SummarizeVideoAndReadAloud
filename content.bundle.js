@@ -224,14 +224,14 @@
       optimized = optimized.replace(/\bAPIs?\b/g, "A-P-I");
       optimized = optimized.replace(/\bURLs?\b/g, "U-R-L");
       optimized = optimized.replace(/\bTTS\b/g, "T-T-S");
-      optimized = optimized.replace(/\bbzw\.\b/gi, "beziehungsweise");
-      optimized = optimized.replace(/\bz\.B\.\b/gi, "zum Beispiel");
-      optimized = optimized.replace(/\bu\.a\.\b/gi, "unter anderem");
-      optimized = optimized.replace(/\bd\.h\.\b/gi, "das hei\xDFt");
-      optimized = optimized.replace(/\bca\.\b/gi, "circa");
-      optimized = optimized.replace(/\betc\.\b/gi, "et cetera");
-      optimized = optimized.replace(/\binkl\.\b/gi, "inklusive");
-      optimized = optimized.replace(/\bvs\.\b/gi, "versus");
+      optimized = optimized.replace(/\bbzw\.(?=\s|$|[),;:!?])/gi, "beziehungsweise");
+      optimized = optimized.replace(/\bz\.b\.(?=\s|$|[),;:!?])/gi, "zum Beispiel");
+      optimized = optimized.replace(/\bu\.a\.(?=\s|$|[),;:!?])/gi, "unter anderem");
+      optimized = optimized.replace(/\bd\.h\.(?=\s|$|[),;:!?])/gi, "das hei\xDFt");
+      optimized = optimized.replace(/\bca\.(?=\s|$|[),;:!?])/gi, "circa");
+      optimized = optimized.replace(/\betc\.(?=\s|$|[),;:!?])/gi, "et cetera");
+      optimized = optimized.replace(/\binkl\.(?=\s|$|[),;:!?])/gi, "inklusive");
+      optimized = optimized.replace(/\bvs\.(?=\s|$|[),;:!?])/gi, "versus");
     } else {
       optimized = optimized.replace(/\bAI\b/g, "A-I");
       optimized = optimized.replace(/\bGPT-?(\d+)?\b/gi, (_m, ver) => ver ? `G-P-T ${ver}` : "G-P-T");
